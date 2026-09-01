@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using JbAutoAi;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
 
@@ -73,6 +74,13 @@ if (args.Contains("--demo-data"))
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
+
+// Without this the keys live in the container filesystem, so every redeploy
+// invalidates all login cookies and antiforgery tokens. Unset locally.
+if (Environment.GetEnvironmentVariable("DP_KEYS_DIR") is { Length: > 0 } dpKeys)
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(Directory.CreateDirectory(dpKeys));
+
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
     o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
