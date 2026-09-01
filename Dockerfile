@@ -8,5 +8,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=build /out .
 ENV ASPNETCORE_URLS=http://+:8080
+# Uploads must live on a mounted volume — the container filesystem is ephemeral.
+ENV UPLOADS_DIR=/data/uploads
+VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "JbAutoAi.dll"]
