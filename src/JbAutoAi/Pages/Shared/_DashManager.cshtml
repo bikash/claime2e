@@ -1,0 +1,134 @@
+@model IndexModel
+@{
+    var p = Model.Period;
+    var stpDelta = Model.StpRate - Model.StpRatePrior;
+    var backlogDelta = Model.Backlog - Model.BacklogPrior;
+    var weekMax = Math.Max(Metrics.StpTarget, Model.StpWeeks.Select(w => w.Rate).DefaultIfEmpty(0).Max());
+    var stages = new[] { "intake", "extraction", "review", "decision", "settlement" };
+    var stageMax = Math.Max(1, Model.Stages.Values.DefaultIfEmpty(0).Max());
+    var ageMax = Math.Max(1, Model.AgeBuckets.Select(b => b.Count).DefaultIfEmpty(0).Max());
+    string Hours(double? h) => h is null ? "—" : h < 48 ? $"{h:F1} h" : $"{h / 24:F1} d";
+}
+
+<div class="grid g5" style="margin-bottom:16px">
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("stp_rate", Model.StpRate.ToString("P1"),
+        Foot: T("dash.vsPrior", (stpDelta >= 0 ? "+" : "") + (stpDelta * 100).ToString("F1") + " pt"),
+        Scope: "team_stp", Tone: Model.StpRate >= Metrics.StpTarget ? "ok" : "warn", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("backlog", Model.Backlog.ToString(),
+        Foot: T("dash.vsPrior", backlogDelta > 0 ? "+" + backlogDelta : backlogDelta.ToString()),
+        Scope: "team_backlog", Tone: "clay", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("sla_breaches", Model.SlaBreaches.ToString(),
+        Foot: T("dash.slaFoot", Metrics.SlaWorkingDays),
+        Scope: "team_sla_breach", Tone: Model.SlaBreaches > 0 ? "stop" : "ok", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("cycle_time", Hours(Model.Cycle.P50),
+        Foot: T("dash.p95", Hours(Model.Cycle.P95), Model.Cycle.N),
+        Scope: "team_decided", Tone: "ink", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("to_siu", Model.ToSiu.ToString(),
+        Foot: T("dash.inRange"), Scope: "team_siu", Tone: Model.ToSiu > 0 ? "warn" : "ink", Period: p))" />
+</div>
+
+<div class="grid g2" style="margin-bottom:16px">
+    @* MD-1 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("md.stpTrend")</h2>
+            <span class="tiny muted">@T("md.target", Metrics.StpTarget.ToString("P0"))</span>
+        </div>
+        @if (Model.StpWeeks.Count == 0)
+        {
+            <p class="small muted">@T("dash.emptyRange")</p>
+        }
+        else
+        {
+            <div class="colchart" role="img" aria-label="@T("md.stpTrend")">
+                @foreach (var w in Model.StpWeeks)
+                {
+                    <div class="col" title="@w.WeekStart.ToString("yyyy-MM-dd"): @w.Rate.ToString("P0") (@w.Stp/@w.Decided)">
+                        <span class="col-fill @(w.Rate >= Metrics.StpTarget ? "ok" : "warn")"
+                              style="height:@((int)(w.Rate / weekMax * 100))%"></span>
+                        <span class="col-x tiny muted">@w.WeekStart.ToString("dd/MM")</span>
+                    </div>
+                }
+                <span class="target-line" style="bottom:@((int)(Metrics.StpTarget / weekMax * 100))%"></span>
+            </div>
+            <table class="visually-hidden">
+                <caption>@T("md.stpTrend")</caption>
+                <tbody>
+                @foreach (var w in Model.StpWeeks)
+                {
+                    <tr><th scope="row">@w.WeekStart.ToString("yyyy-MM-dd")</th><td>@w.Rate.ToString("P0")</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @* MD-2 — capacity for rebalancing, deliberately not a throughput ranking *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("md.workload")</h2>
+            <span class="tiny muted">@T("md.capacity", Metrics.HandlerCapacity)</span>
+        </div>
+        <p class="tiny muted" style="margin-bottom:10px">@T("md.workloadNote")</p>
+        <div class="stack">
+            @foreach (var w in Model.Workload)
+            {
+                var load = (double)w.Open / Metrics.HandlerCapacity;
+                var tone = load >= Metrics.OverloadAt ? "stop" : load >= 0.6 ? "warn" : "ok";
+                <a class="hbar" href="/claims?scope=handler:@w.HandlerId&from=@p.From.ToString("yyyy-MM-dd")&to=@p.To.ToString("yyyy-MM-dd")">
+                    <span class="hbar-label small">@w.Name<span class="tiny muted"> · @w.Role.Replace('_', ' ')</span></span>
+                    <span class="hbar-track">
+                        <span class="hbar-fill @tone" style="width:@(Math.Min(100, (int)(load * 100)))%"></span>
+                    </span>
+                    <span class="mono small b">@w.Open<span class="tiny muted">/@Metrics.HandlerCapacity</span></span>
+                    @if (load >= Metrics.OverloadAt)
+                    {
+                        <span class="badge stop tiny"><span class="pip"></span>@T("md.overloaded")</span>
+                    }
+                </a>
+            }
+        </div>
+    </section>
+</div>
+
+<div class="grid g2">
+    @* MD-3 *@
+    <section class="card">
+        <h2 style="margin-bottom:12px">@T("md.stages")</h2>
+        <div class="stack">
+            @foreach (var s in stages)
+            {
+                var n = Model.Stages.GetValueOrDefault(s);
+                <a class="hbar" href="/claims?scope=stage_@s&from=@p.From.ToString("yyyy-MM-dd")&to=@p.To.ToString("yyyy-MM-dd")">
+                    <span class="hbar-label small">@T("stage." + s)</span>
+                    <span class="hbar-track"><span class="hbar-fill" style="width:@(n * 100 / stageMax)%"></span></span>
+                    <span class="mono small b">@n</span>
+                </a>
+            }
+        </div>
+    </section>
+
+    @* MD-4 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("md.aging")</h2>
+            <span class="tiny muted">@T("md.agingHint", Metrics.SlaWorkingDays)</span>
+        </div>
+        <div class="stack">
+            @foreach (var (key, n) in Model.AgeBuckets)
+            {
+                var breach = key == "age_5plus";
+                <a class="hbar" href="/claims?scope=@key&from=@p.From.ToString("yyyy-MM-dd")&to=@p.To.ToString("yyyy-MM-dd")">
+                    <span class="hbar-label small">
+                        @T("age." + key)
+                        @if (breach) { <span class="badge stop tiny"><span class="pip"></span>@T("md.breach")</span> }
+                    </span>
+                    <span class="hbar-track">
+                        <span class="hbar-fill @(breach ? "stop" : "")" style="width:@(n * 100 / ageMax)%"></span>
+                    </span>
+                    <span class="mono small b">@n</span>
+                </a>
+            }
+        </div>
+    </section>
+</div>

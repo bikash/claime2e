@@ -1,0 +1,30 @@
+@model Metrics.KpiCard
+@{
+    var def = Metrics.Definition(Model.DefKey);
+    var hint = T(def.FormulaKey) + " — " + T("dash.source") + ": " + T(def.SourceKey);
+    var q = Model.Period is { } p ? $"&from={p.From:yyyy-MM-dd}&to={p.To:yyyy-MM-dd}" : "";
+}
+<div class="kpi" data-tone="@(def.Available ? Model.Tone : "ink")">
+    <div class="label spread">
+        <span>@T(def.LabelKey)</span>
+        <span class="info" tabindex="0" role="note" title="@hint" aria-label="@hint">i</span>
+    </div>
+    @if (!def.Available)
+    {
+        <div class="n muted" aria-label="@T("dash.noSource")">—</div>
+        <div class="foot">
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+            @T(def.MissingSourceKey!)
+        </div>
+    }
+    else if (Model.Scope is { Length: > 0 } scope)
+    {
+        <div class="n"><a href="/claims?scope=@scope@q">@Model.Value</a></div>
+        @if (Model.Foot is { Length: > 0 } f) { <div class="foot">@f</div> }
+    }
+    else
+    {
+        <div class="n">@Model.Value</div>
+        @if (Model.Foot is { Length: > 0 } f2) { <div class="foot">@f2</div> }
+    }
+</div>

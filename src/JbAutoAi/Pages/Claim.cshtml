@@ -1,0 +1,1135 @@
+@page "/claims/{cid}"
+@model ClaimModel
+@{
+    var c = Model.Claim;
+    ViewData["Title"] = $"{c.ClaimNumber} · Boxora";
+
+    var (heroCls, heroTitle, heroBody) = c.DecisionOutcome switch
+    {
+        "auto_approved" => ("ok", T("claim.hero.ok"), T("claim.hero.okBody")),
+        "assisted" => ("warn", T("claim.hero.warn"), T("claim.hero.warnBody")),
+        "manual" => ("stop", T("claim.hero.stop"), T("claim.hero.stopBody")),
+        _ => ("", "", ""),
+    };
+
+    var openGates = Model.Reasons.Where(r => !r.Ok).ToList();
+    var fraudHigh = openGates.Any(r => r.Code == "FRAUD_SIGNALS_LOW");
+    var integrity = c.CitationIntegrity;
+    var citedInSummary = Model.Citations.Where(x => x.UsedIn != "retrieved").ToList();
+    var broken = Model.Citations.Where(x => !x.Verified).ToList();
+}
+
+<div class="ws-head">
+    <div class="ws-top">
+        <div>
+            <a class="backlink" href="/">← @T("dash.backTo")</a>
+            <h1 style="margin-top:10px">@c.ClaimNumber</h1>
+            <div class="sub">
+                @if (c.LicensePlate is { Length: > 0 } lp)
+                {
+                    <span class="plate"><b>NL</b><span>@lp</span></span>
+                }
+                @c.PolicyholderName
+                @if (c.LossLocation is { Length: > 0 } loc) { <text>· @loc</text> }
+                @if (c.LossDate is { } ld) { <text>· @ld.ToString("yyyy-MM-dd")</text> }
+            </div>
+        </div>
+        <div class="row" style="gap:8px">
+            @if (heroCls.Length > 0)
+            {
+                <span class="badge @heroCls"><span class="pip"></span>@heroTitle</span>
+            }
+            else
+            {
+                <span class="badge">@c.Status</span>
+            }
+        </div>
+    </div>
+
+    <div class="kv-row">
+        <div class="kv">
+            <div class="k">@T("col.policyholder")</div>
+            <div class="v">@c.PolicyholderName</div>
+        </div>
+        <div class="kv">
+            <div class="k">@T("col.amount")</div>
+            <div class="v mono">@I18n.Money(c.EstimatedAmountEur)</div>
+        </div>
+        <div class="kv">
+            <div class="k">@T("rail.fraud")</div>
+            <div class="v mono" style="color:@(fraudHigh ? "var(--neg)" : "var(--pos)")">
+                @((c.FraudScore * 100).ToString("F0")) / @T(fraudHigh ? "rail.high" : "rail.low")
+            </div>
+        </div>
+        <div class="kv">
+            <div class="k">@T("claim.assigned")</div>
+            <div class="v">@(Model.Assigned?.Name ?? T("claim.unassigned"))</div>
+        </div>
+        <div class="kv">
+            <div class="k">@T("claim.policy")</div>
+            <div class="v mono">@(c.PolicyNumber is { Length: > 0 } ? c.PolicyNumber : "—")</div>
+        </div>
+    </div>
+
+    @if (openGates.Count == 0 && Model.Reasons.Count > 0)
+    {
+        <div class="gate">✓ @T("ws.gatesClear")</div>
+    }
+    else if (openGates.Count > 0)
+    {
+        <div class="gate" style="background:var(--warn-soft);border-color:#EAD6AE;color:var(--warn)">
+            @T("ws.gatesOpen", openGates.Count)
+        </div>
+    }
+</div>
+
+<div class="ws-body">
+<div class="claim-main">
+
+@if (heroCls.Length > 0)
+{
+    <section class="hero @heroCls" style="margin-bottom:16px">
+        <div class="spread" style="align-items:flex-start">
+            <div>
+                <div class="label">@T("claim.decision")</div>
+                <h2>@heroTitle</h2>
+                <p>@heroBody</p>
+            </div>
+            <div class="figs">
+                <div>
+                    <div class="label">@T("claim.fig.damage")</div>
+                    <div class="n">@I18n.Money(c.EstimatedAmountEur)</div>
+                </div>
+                <div>
+                    <div class="label">@T("claim.fig.extraction")</div>
+                    <div class="n">@(c.ExtractionConfidence?.ToString("P0") ?? "—")</div>
+                </div>
+                <div>
+                    <div class="label">@T("claim.fig.fraud")</div>
+                    <div class="n">@c.FraudScore.ToString("F2")</div>
+                </div>
+                <div>
+                    <div class="label">@T("claim.fig.citations")</div>
+                    <div class="n">@(integrity?.ToString("P0") ?? "—")</div>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+@{
+    var stages = ClaimProgress.Stages(c, Model.Documents, Model.Reasons);
+    var actions = ClaimProgress.NextActions(c, Model.Reasons);
+    var lead = actions[0];
+    var inv0 = System.Globalization.CultureInfo.InvariantCulture;
+    string W(double v) => (Math.Clamp(v, 0, 1) * 100).ToString("F1", inv0);
+    var capRatio = ClaimProgress.CapRatio(c);
+    var confMin = Rules.ConfidenceMin();
+}
+
+<section class="card" style="margin-bottom:16px">
+    <div class="spread" style="margin-bottom:14px">
+        <h2>@T("stage.pipeline")</h2>
+        <span class="tiny muted">@c.Status</span>
+    </div>
+
+    <ol class="pipeline">
+        @foreach (var s in stages)
+        {
+            <li class="@s.State">
+                <span class="dot"></span>
+                <span class="lbl">@s.Label</span>
+                @if (s.Detail is { Length: > 0 })
+                {
+                    <span class="det">@s.Detail</span>
+                }
+            </li>
+        }
+    </ol>
+
+    <div class="next @lead.Severity">
+        <div class="next-head">
+            <span class="label">@T("stage.nextAction")</span>
+            <strong>@lead.Title</strong>
+        </div>
+        <p class="small">@lead.Detail</p>
+        <div class="row" style="margin-top:10px">
+            @if (lead.ButtonKey == "act.btn.analyse" || lead.ButtonKey == "act.btn.reanalyse")
+            {
+                <form method="post" action="/claims/@c.Id/analyze">
+                    <button type="submit">@T(lead.ButtonKey)</button>
+                </form>
+            }
+            else if (lead.ButtonKey is { } key && lead.Href is { } href)
+            {
+                <a class="btn" href="@href">@T(key)</a>
+            }
+            @if (actions.Count > 1)
+            {
+                <span class="tiny muted">@T("stage.moreActions", actions.Count - 1)</span>
+            }
+        </div>
+
+        @if (actions.Count > 1)
+        {
+            <details style="margin-top:10px">
+                <summary>@T("stage.moreActions", actions.Count - 1)</summary>
+                <ul class="plain" style="margin-top:8px">
+                    @foreach (var act in actions.Skip(1))
+                    {
+                        <li class="signal">
+                            <span class="pip @(act.Severity == "stop" ? "high" : "medium")"></span>
+                            <div>
+                                <div class="small"><strong>@act.Title</strong></div>
+                                <div class="tiny muted">@act.Detail</div>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </details>
+        }
+    </div>
+
+    @if (c.DecisionOutcome is not null)
+    {
+        <div class="grid g2" style="margin-top:16px">
+            <div>
+                <div class="spread tiny muted" style="margin-bottom:4px">
+                    <span>@T("meter.confidence", confMin.ToString("P0"))</span>
+                    <span class="mono">@(c.ExtractionConfidence?.ToString("P0") ?? "—")</span>
+                </div>
+                <div class="thresh">
+                    <div class="fill @(c.ExtractionConfidence >= confMin ? "ok" : "warn")"
+                         style="width:@(W(c.ExtractionConfidence ?? 0))%"></div>
+                    <div class="mark" style="left:@(W(confMin))%"></div>
+                </div>
+            </div>
+            <div>
+                <div class="spread tiny muted" style="margin-bottom:4px">
+                    <span>@T("meter.amount", I18n.Money(Rules.Cap()))</span>
+                    <span class="mono">@I18n.Money(c.EstimatedAmountEur)</span>
+                </div>
+                <div class="thresh">
+                    <div class="fill @(capRatio is > 0 and <= 1 ? "ok" : "stop")"
+                         style="width:@(W(capRatio))%"></div>
+                    <div class="mark stop" style="left:100%"></div>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@if (broken.Count > 0)
+{
+    <section class="card" style="border-color:#EFCFC2;background:var(--stop-bg);margin-bottom:16px">
+        <h2>@T("claim.broken.title", broken.Count)</h2>
+        <p class="small" style="margin:6px 0 12px">@T("claim.broken.body")</p>
+        <ul class="plain">
+            @foreach (var b in broken)
+            {
+                <li class="passage broken">
+                    <h3>@b.Citation</h3>
+                    <div class="small">@b.Title</div>
+                    <div class="meta mono">@b.ChunkId</div>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+<div class="grid g3">
+
+    <section class="card span2">
+        <h2>@T("claim.fnol")</h2>
+        <div class="grid g2 small">
+            <div><div class="label">@T("claim.policy")</div>@c.PolicyNumber</div>
+            <div><div class="label">@T("claim.vin")</div>@(c.Vin is { Length: > 0 } ? c.Vin : "—")</div>
+            <div><div class="label">@T("claim.lossDate")</div>@(c.LossDate?.ToString("yyyy-MM-dd") ?? "—")</div>
+            <div><div class="label">@T("claim.location")</div>@c.LossLocation</div>
+            <div><div class="label">@T("claim.thirdParty")</div>@(c.ThirdPartyInvolved ? T("yes") : T("no"))</div>
+            <div><div class="label">@T("claim.injuries")</div>@(c.Injuries ? T("yes") : T("no"))</div>
+            <div class="span2">
+                <div class="label">@T("claim.policeReport")</div>
+                @(c.PoliceReportNumber is { Length: > 0 } ? c.PoliceReportNumber : "—")
+            </div>
+            <div class="span2">
+                <div class="label">@T("claim.description")</div>
+                <div class="pre">@c.Description</div>
+            </div>
+        </div>
+        <form method="post" action="/claims/@c.Id/analyze" style="margin-top:16px;text-align:right">
+            <button type="submit">@(c.DecisionOutcome is null ? T("claim.analyse") : T("claim.reanalyse"))</button>
+        </form>
+    </section>
+
+</div>
+
+<div class="tabs page-tabs" id="claimTabs">
+    <input type="radio" name="claimTabs" id="tab-assessment" checked />
+    <input type="radio" name="claimTabs" id="tab-rules" />
+    @if (c.RulesTrace is { Length: > 0 }) { <input type="radio" name="claimTabs" id="tab-trace" /> }
+    <input type="radio" name="claimTabs" id="tab-fraud" />
+    <input type="radio" name="claimTabs" id="tab-summary" />
+    <input type="radio" name="claimTabs" id="tab-copilot" />
+    <input type="radio" name="claimTabs" id="tab-emails" />
+    <input type="radio" name="claimTabs" id="tab-timeline" />
+    <input type="radio" name="claimTabs" id="tab-documents" />
+
+    <div class="tab-bar">
+        <label for="tab-assessment">@T("claim.assessment")</label>
+        <label for="tab-rules">@T("claim.rules")</label>
+        @if (c.RulesTrace is { Length: > 0 }) { <label for="tab-trace">@T("claim.trace")</label> }
+        <label for="tab-fraud">@T("claim.fraud")</label>
+        <label for="tab-summary">@T("claim.summary")</label>
+        <label for="tab-copilot">@T("chat.title")</label>
+        <label for="tab-emails">@T("claim.correspondence")</label>
+        <label for="tab-timeline">@T("claim.timeline")</label>
+        <label for="tab-documents">@T("claim.documents")</label>
+    </div>
+
+    <div class="tab-panel" data-for="tab-assessment">
+        <div class="grid g3">
+
+            <section class="card">
+                <h2>@T("claim.assessment")</h2>
+                @if (Model.Assessment.Count == 0)
+                {
+                    <p class="small muted">@T("claim.assessment.empty")</p>
+                }
+                else
+                {
+                    <div class="stack small">
+                        <div class="spread">
+                            <span class="muted">@T("claim.severity")</span>
+                            <strong>@(ClaimModel.Str(Model.Assessment, "severity") ?? "—")</strong>
+                        </div>
+                        <div class="spread">
+                            <span class="muted">@T("claim.impact")</span>
+                            <strong>@(ClaimModel.Str(Model.Assessment, "impact_direction") ?? "—")</strong>
+                        </div>
+                        <div class="spread">
+                            <span class="muted">@T("claim.photos")</span>
+                            <strong>@ClaimModel.Int(Model.Assessment, "photo_count")</strong>
+                        </div>
+                        <div class="spread">
+                            <span class="muted">@T("claim.estimates")</span>
+                            <strong>@ClaimModel.Int(Model.Assessment, "estimate_document_count")</strong>
+                        </div>
+                        <div class="spread">
+                            <span class="muted">@T("claim.policeReport")</span>
+                            <strong>@(ClaimModel.Bool(Model.Assessment, "police_report_present") ? T("yes") : T("no"))</strong>
+                        </div>
+                    </div>
+                    <div style="margin-top:14px">
+                        <div class="label" style="margin-bottom:6px">@T("claim.damageAreas")</div>
+                        <div class="chips">
+                            @if (Model.DamageAreas.Count == 0)
+                            {
+                                <span class="muted small">—</span>
+                            }
+                            @foreach (var d in Model.DamageAreas)
+                            {
+                                <span class="chip">@d</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+
+            @if (Model.Liability.Count > 0)
+            {
+                <section class="card span2">
+                    <h2>@T("claim.liability")</h2>
+                    <p class="sub">@T("claim.liability.sub")</p>
+
+                    @{
+                        var insuredPct = Model.Liability["liability_insured_pct"]?.ToString();
+                        var counterPct = Model.Liability["liability_counterparty_pct"]?.ToString();
+                        double.TryParse(insuredPct, inv0, out var insuredShare);
+                        double.TryParse(counterPct, inv0, out var counterShare);
+                        var hasSplit = insuredPct is not null || counterPct is not null;
+                        var evidence = Model.Documents
+                            .Where(d => d.DocType is "photo" or "repair_estimate" or "police_report")
+                            .ToList();
+                    }
+
+                    <div class="spread" style="align-items:flex-end;margin-bottom:8px">
+                        <div>
+                            <div class="label">@T("claim.scenario")</div>
+                            <strong style="font-size:16px">@(ClaimModel.Str(Model.Liability, "scenario") ?? T("claim.unknown"))</strong>
+                        </div>
+                        <span class="badge @(ClaimModel.Bool(Model.Liability, "requires_human") ? "warn" : "ok")">
+                            <span class="pip"></span>
+                            @T("claim.humanCheck"): @(ClaimModel.Bool(Model.Liability, "requires_human") ? T("claim.required") : T("claim.notRequired"))
+                        </span>
+                    </div>
+
+                    @if (hasSplit)
+                    {
+                        <div class="liab-split">
+                            <div class="liab-bar">
+                                <span class="mine" style="width:@(W(insuredShare / 100))%"></span>
+                                <span class="theirs" style="width:@(W(counterShare / 100))%"></span>
+                            </div>
+                            <div class="spread tiny muted" style="margin-top:5px">
+                                <span><span class="swatch mine"></span>@(insuredPct ?? "?")% @T("liab.insured")</span>
+                                <span>@(counterPct ?? "?")% @T("liab.counterparty")<span class="swatch theirs"></span></span>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="spread liab-head">
+                        <div class="label" style="margin:0">@T("liab.narrative")</div>
+                        <div class="liab-toggles">
+                            <label class="chip"><input type="checkbox" id="liabEvidence" /> @T("liab.evidence")</label>
+                            <label class="chip"><input type="checkbox" id="liabLegal" checked /> @T("liab.legal")</label>
+                        </div>
+                    </div>
+
+                    <div class="liab-panel">
+                        @if (ClaimModel.Str(Model.Liability, "reasoning") is { } reasoning)
+                        {
+                            <div class="pre small liab-narrative">
+                                @foreach (var (text, cite, isBroken) in Legal.Segments(reasoning, Model.Citations))
+                                {
+                                    if (cite is null)
+                                    {
+                                        @text
+                                    }
+                                    else
+                                    {
+                                        <a class="cite @(isBroken ? "broken" : "")" target="_blank" rel="noopener"
+                                           href="/legal?cite=@Uri.EscapeDataString(cite.ChunkId)"
+                                           title="@cite.Title">@cite.Citation</a>
+                                    }
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="small muted">@T("liab.noNarrative")</p>
+                        }
+
+                        <div class="liab-evidence">
+                            <div class="tiny muted" style="margin-bottom:6px">@T("liab.evidenceHint")</div>
+                            @if (evidence.Count == 0)
+                            {
+                                <p class="tiny muted">@T("liab.evidenceEmpty")</p>
+                            }
+                            else
+                            {
+                                <div class="chips">
+                                    @foreach (var d in evidence)
+                                    {
+                                        <span class="chip">@(d.DocType?.Replace('_', ' ')) · @d.Filename</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    @if (ClaimModel.Str(Model.Liability, "counter_scenario") is { } counter)
+                    {
+                        <p class="small muted" style="margin-top:12px">
+                            <strong>@T("claim.counterScenario"):</strong> @counter
+                        </p>
+                    }
+                </section>
+            }
+
+
+            <section class="card" id="handler">
+                <h2>@T("claim.handler")</h2>
+                <form method="post" action="/claims/@c.Id/assign" class="stack" style="margin-bottom:16px">
+                    <div class="label">@T("claim.assignTo")</div>
+                    <select name="handlerId">
+                        @foreach (var h in Model.Handlers)
+                        {
+                            <option value="@h.Id" selected="@(Model.Assigned?.Id == h.Id)">@h.Name — @h.RoleLabel</option>
+                        }
+                    </select>
+                    <button class="full" type="submit">@T("claim.assign")</button>
+                </form>
+                <form method="post" action="/claims/@c.Id/delegate" class="stack">
+                    <div class="label">@T("claim.delegateTo")</div>
+                    <select name="handlerId">
+                        @foreach (var h in Model.Handlers)
+                        {
+                            <option value="@h.Id">@h.Name — @h.RoleLabel</option>
+                        }
+                    </select>
+                    <input type="text" name="reason" placeholder="@T("claim.reason")" />
+                    <button class="full btn-ghost" type="submit">@T("claim.delegate")</button>
+                </form>
+                <div class="tiny muted" style="margin-top:12px">
+                    @T("claim.actingAs") <strong>@Model.Actor.Name</strong> (@Model.Actor.RoleLabel)
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>@T("claim.note")</h2>
+                <form method="post" action="/claims/@c.Id/note" class="stack">
+                    <textarea name="body" rows="4" required placeholder="@T("claim.notePlaceholder")"></textarea>
+                    <button class="full btn-ghost" type="submit">@T("claim.noteAdd")</button>
+                </form>
+            </section>
+
+        </div>
+    </div>
+
+    <div class="tab-panel" data-for="tab-rules">
+        <section class="card">
+            <h2>@T("claim.rules")</h2>
+                    @if (Model.Reasons.Count == 0)
+                    {
+                        <p class="small muted">@T("claim.rules.empty")</p>
+                    }
+                    else
+                    {
+                        <div class="grid g2">
+                            @foreach (var r in Model.Reasons)
+                            {
+                                <div class="rule">
+                                    <span class="pip @(r.Ok ? "pass" : "fail")"></span>
+                                    <div>
+                                        <div class="label">@r.Code</div>
+                                        <div class="small">@r.Message</div>
+                                        @if (r.LegalRef is { Length: > 0 })
+                                        {
+                                            <div class="tiny muted" style="margin-top:2px">@r.LegalRef</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+        </section>
+    </div>
+
+    @if (c.RulesTrace is { Length: > 0 })
+    {
+        <div class="tab-panel" data-for="tab-trace">
+            <section class="card">
+                <h2>@T("claim.trace")</h2>
+                <pre class="dump">@c.RulesTrace</pre>
+            </section>
+        </div>
+    }
+
+    <div class="tab-panel" data-for="tab-fraud">
+        <section class="card" id="fraud">
+            @{
+                var score = c.FraudScore;
+                var band = score >= 0.3 ? "stop" : score >= 0.15 ? "warn" : "ok";
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                string Pc(double v) => (Math.Clamp(v, 0, 1) * 100).ToString("F1", inv);
+                // Signals carry their own contribution, so the bar is the arithmetic
+                // behind the number rather than a decorative restatement of it.
+                var contributions = Model.Signals.Where(s => s.Weight > 0)
+                                                 .OrderByDescending(s => s.Weight).ToList();
+                var accounted = contributions.Sum(s => s.Weight);
+            }
+            <div class="spread" style="margin-bottom:10px">
+                <h2>@T("claim.fraud")</h2>
+                <span class="badge @band">@T("claim.fraud.score", score.ToString("F2"))</span>
+            </div>
+
+            <div class="gauge" role="img"
+                 aria-label="@T("claim.fraud.score", score.ToString("F2"))">
+                <div class="gauge-fill @band" style="width:@(Pc(score))%"></div>
+                <div class="gauge-mark" style="left:15%" title="0.15"></div>
+                <div class="gauge-mark stop" style="left:30%" title="0.30"></div>
+            </div>
+            <div class="gauge-axis">
+                <span>0.00</span>
+                <span class="@(score >= 0.3 ? "hit" : "")">@T("claim.fraud.gate")</span>
+                <span>1.00</span>
+            </div>
+
+            @if (Model.Signals.Count == 0)
+            {
+                <p class="small" style="color:var(--ok);margin-top:14px">@T("claim.fraud.none")</p>
+            }
+            else
+            {
+                @if (contributions.Count > 0)
+                {
+                    <div class="stackbar" style="margin-top:14px" aria-hidden="true">
+                        @foreach (var s in contributions)
+                        {
+                            <span class="seg @s.Severity" style="width:@(Pc(s.Weight))%" title="@s.Code +@s.Weight.ToString("F2")"></span>
+                        }
+                        @if (accounted < 1)
+                        {
+                            <span class="seg rest" style="width:@(Pc(1 - accounted))%"></span>
+                        }
+                    </div>
+                }
+
+                <ul class="plain" style="margin-top:14px">
+                    @foreach (var s in Model.Signals)
+                    {
+                        <li class="signal">
+                            <span class="pip @s.Severity"></span>
+                            <div style="flex:1;min-width:0">
+                                <div class="spread">
+                                    <span class="label">@s.Code · @s.Severity</span>
+                                    @if (s.Weight > 0)
+                                    {
+                                        <span class="tiny mono muted">+@s.Weight.ToString("F2")</span>
+                                    }
+                                </div>
+                                <div class="small">@s.Message</div>
+                                @if (s.Weight > 0)
+                                {
+                                    <div class="minibar"><span class="@s.Severity" style="width:@(Pc(s.Weight))%"></span></div>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+                <p class="tiny muted" style="margin-top:12px">@T("claim.fraud.note")</p>
+            }
+        </section>
+    </div>
+
+    <div class="tab-panel" data-for="tab-summary">
+        @if (c.Summary is { Length: > 0 })
+        {
+            <section class="card">
+                <h2>@T("claim.summary")</h2>
+                <div class="pre">
+                    @foreach (var (text, cite, isBroken) in Legal.Segments(c.Summary, Model.Citations))
+                    {
+                        if (cite is null)
+                        {
+                            @text
+                        }
+                        else
+                        {
+                            <a class="cite @(isBroken ? "broken" : "")" target="_blank" rel="noopener"
+                               href="/legal?cite=@Uri.EscapeDataString(cite.ChunkId)"
+                               title="@cite.Title">@cite.Citation</a>
+                        }
+                    }
+                </div>
+                <p class="tiny muted" style="margin-top:14px">@T("claim.summary.note")</p>
+            </section>
+        }
+        else
+        {
+            <section class="card">
+                <h2>@T("claim.summary")</h2>
+                <p class="small muted">—</p>
+            </section>
+        }
+    </div>
+
+    <div class="tab-panel" data-for="tab-copilot">
+        <section class="chat-panel" data-chat
+                 data-drop="@T("chat.drop")" data-uploading="@T("chat.uploading")"
+                 data-analyzing="@T("chat.analyzing")" data-decision="@T("chat.decision")"
+                 data-settle="@T("chat.settle")" data-settled="@T("chat.settled")">
+        <header class="spread">
+            <div>
+                <strong>@T("chat.title")</strong>
+                <div class="tiny muted chat-hint">@T("chat.general")</div>
+            </div>
+            <span class="badge ok"><span class="pip"></span>online</span>
+        </header>
+        <div class="chat-messages" data-sources="@T("chat.sources")">
+            <div class="tiny muted">@T("chat.intro")</div>
+        </div>
+        <form class="chat-form">
+            <textarea class="chat-input" rows="1" placeholder="@T("chat.placeholder")"></textarea>
+            <button class="chat-send" type="submit">@T("chat.send")</button>
+        </form>
+        </section>
+    </div>
+
+    <div class="tab-panel" data-for="tab-emails">
+        <section class="card" id="correspondence" data-claim="@c.Id">
+            <div class="spread" style="margin-bottom:16px">
+                <h2>@T("corr.title")</h2>
+                <span class="tiny muted mono">@T("corr.merged")</span>
+            </div>
+
+            <div class="corr-grid">
+                <div>
+                    <div class="label" style="margin-bottom:8px">@T("corr.templates")</div>
+                    @foreach (var t in Model.Templates)
+                    {
+                        <button type="button" class="tpl-card" data-tpl="@t.Id">
+                            <strong>@t.Name</strong>
+                            <span class="tiny muted">@T("corr.audience." + t.Audience)</span>
+                        </button>
+                    }
+                </div>
+
+                <div>
+                    <div class="grid g2">
+                        <label class="field"><span class="label">@T("corr.recipient")</span>
+                            <select id="corrRecipient">
+                                <option value="insured" data-to="@c.PolicyholderName">@T("corr.rcpt.insured") — @c.PolicyholderName</option>
+                                <option value="tpl_insurer" data-to="@T("corr.rcpt.tpl")">@T("corr.rcpt.tpl")</option>
+                                <option value="repairer" data-to="@T("corr.rcpt.repairer")">@T("corr.rcpt.repairer")</option>
+                                <option value="internal" data-to="@T("corr.rcpt.internal")">@T("corr.rcpt.internal")</option>
+                            </select>
+                        </label>
+                        <label class="field"><span class="label">@T("corr.channel")</span>
+                            <select id="corrChannel">
+                                <option value="email">@T("corr.ch.email")</option>
+                                <option value="portal">@T("corr.ch.portal")</option>
+                                <option value="post">@T("corr.ch.post")</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <label class="field"><span class="label">@T("corr.prompt")</span>
+                        <textarea id="corrPrompt" rows="2" placeholder="@T("corr.promptPlaceholder")"></textarea>
+                    </label>
+
+                    <div class="spread" style="margin:12px 0 14px">
+                        <span class="badge ai">✦ @T("corr.aiBadge")</span>
+                        <button type="button" id="corrGenerate" data-busy="@T("corr.generating")">@T("corr.generate")</button>
+                    </div>
+                    <p class="tiny" id="corrError" hidden style="color:var(--stop);margin-bottom:10px">@T("corr.failed")</p>
+
+                    <form method="post" action="/claims/@c.Id/email/send" class="draft-card" id="corrDraft" hidden>
+                        <input type="hidden" name="templateId" id="corrTplId" />
+                        <input type="hidden" name="channel" id="corrChannelOut" />
+                        <div class="draft-head spread">
+                            <div class="small muted">
+                                @T("corr.to") <span class="mono" id="corrToLabel"></span> · <span id="corrChannelLabel"></span>
+                            </div>
+                            <span class="tiny muted">@T("corr.draft")</span>
+                        </div>
+                        <div class="draft-body">
+                            <h3 id="corrSubjectView"></h3>
+                            <div class="pre" id="corrBodyView"></div>
+                            <div id="corrFields" hidden>
+                                <label class="field"><span class="label">@T("claim.to")</span>
+                                    <input name="to" id="corrTo" /></label>
+                                <label class="field"><span class="label">@T("claim.subject")</span>
+                                    <input name="subject" id="corrSubject" /></label>
+                                <label class="field"><span class="label">@T("claim.message")</span>
+                                    <textarea name="body" id="corrBody" rows="10"></textarea></label>
+                            </div>
+                            <div class="row" style="margin-top:14px">
+                                <button type="submit">@T("corr.send")</button>
+                                <button type="button" class="btn" id="corrEdit"
+                                        data-edit="@T("corr.edit")" data-done="@T("corr.done")">@T("corr.edit")</button>
+                            </div>
+                            <p class="tiny muted" style="margin-top:10px">@T("corr.demoNote")</p>
+                        </div>
+                    </form>
+
+                    @{
+                        var messages = Model.Activity.Where(a => a.Kind is "email_sent" or "email_saved").ToList();
+                    }
+                    <div class="label" style="margin:22px 0 8px">@T("corr.sent")</div>
+                    @if (messages.Count == 0)
+                    {
+                        <p class="tiny muted">@T("corr.sentEmpty")</p>
+                    }
+                    else
+                    {
+                        <ul class="plain sentlist">
+                            @foreach (var m in messages)
+                            {
+                                <li>
+                                    <span class="badge @(m.Kind == "email_sent" ? "ok" : "")">
+                                        @T(m.Kind == "email_sent" ? "corr.statusSent" : "corr.statusDraft")
+                                    </span>
+                                    <div>
+                                        <div class="small">@m.Body</div>
+                                        <div class="tiny muted">@m.CreatedAt.ToString("yyyy-MM-dd HH:mm") · @m.ActorName</div>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="tab-panel" data-for="tab-timeline">
+        <section class="card">
+            <h2>@T("claim.timeline")</h2>
+            @if (Model.Activity.Count == 0)
+            {
+                <p class="small muted">@T("claim.timeline.empty")</p>
+            }
+            else
+            {
+                <ul class="plain timeline">
+                    @foreach (var e in Model.Activity)
+                    {
+                        var (tone, path) = e.Kind switch
+                        {
+                            "assigned"        => ("clay", "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M20 8v6 M23 11h-6"),
+                            "delegated"       => ("clay", "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"),
+                            "note"            => ("ink",  "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"),
+                            "email_saved"     => ("clay", "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6"),
+                            "email_sent"      => ("ok",   "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6"),
+                            "decision"        => ("ok",   "M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"),
+                            "customer_upload" => ("clay", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"),
+                            "workflow_run"    => ("clay", "M9 3H4a1 1 0 0 0-1 1v5 M15 3h5a1 1 0 0 1 1 1v5 M9 21H4a1 1 0 0 1-1-1v-5 M15 21h5a1 1 0 0 0 1-1v-5 M12 8v8 M8 12h8"),
+                            "portal_login"    => ("ink",  "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4 M10 17l5-5-5-5 M15 12H3"),
+                            _                 => ("ink",  "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 8v4l3 2"),
+                        };
+                        // Injury-icon nudge: if the claim carries injuries and this is the first event.
+                        var isInjuryHint = Model.Claim.Injuries && e == Model.Activity[0];
+                        <li>
+                            <div class="tl-icon @tone" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    @foreach (var seg in path.Split(" M"))
+                                    {
+                                        <path d="@(seg.StartsWith("M") ? seg : "M" + seg)"></path>
+                                    }
+                                </svg>
+                            </div>
+                            <div class="tl-body">
+                                <div class="spread">
+                                    <span class="label">
+                                        @e.KindLabel · @(e.ActorName ?? T("claim.system"))
+                                        @if (isInjuryHint)
+                                        {
+                                            <span class="badge stop tiny" style="margin-left:6px">@T("claim.injuriesHint")</span>
+                                        }
+                                    </span>
+                                    <span class="tiny muted">@e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                                </div>
+                                <div class="small pre">@e.Body</div>
+                            @if (e.Kind == "email_saved" && e.Meta is { } meta
+                                 && System.Text.Json.Nodes.JsonNode.Parse(meta) is System.Text.Json.Nodes.JsonObject m)
+                            {
+                                <details style="margin-top:6px">
+                                    <summary>@T("claim.showDraft")</summary>
+                                    <div class="passage small">
+                                        <div><strong>@T("claim.to"):</strong> @m["to"]</div>
+                                        <div><strong>@T("claim.subject"):</strong> @m["subject"]</div>
+                                        <div class="pre" style="margin-top:8px">@m["body"]</div>
+                                    </div>
+                                </details>
+                            }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+
+    <div class="tab-panel" data-for="tab-documents">
+        <section class="card">
+            <div class="spread" style="margin-bottom:12px">
+                <h2>@T("claim.documents")</h2>
+                <span class="tiny muted">@T("claim.documents.count", Model.Documents.Count)</span>
+            </div>
+            @if (Model.Documents.Count == 0)
+            {
+                <p class="small muted">@T("claim.documents.none")</p>
+            }
+            else
+            {
+                <ul class="plain" style="margin-bottom:16px">
+                    @foreach (var d in Model.Documents)
+                    {
+                        <li class="item">
+                            <div>
+                                <div class="t">@d.Filename</div>
+                                <div class="tiny muted">@d.DocType</div>
+                            </div>
+                            <a class="small" target="_blank" href="/uploads/@string.Join('/', d.Filepath.Split('/').Select(Uri.EscapeDataString))">@T("claim.open")</a>
+                        </li>
+                    }
+                </ul>
+            }
+            <form method="post" action="/claims/@c.Id/upload" enctype="multipart/form-data"
+                  class="uploadform" id="uploadForm">
+                <div class="label" style="margin-bottom:8px">@T("claim.upload")</div>
+                <label class="dropzone" id="dropzone">
+                    <input type="file" name="files" id="dropInput" multiple
+                           accept=".pdf,.jpg,.jpeg,.png,.webp,.eml,.txt,.msg" hidden />
+                    <div class="dz-body">
+                        <svg class="dz-icon" viewBox="0 0 24 24" width="42" height="42" aria-hidden="true">
+                            <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M12 15V4m0 0-4 4m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
+                        </svg>
+                        <div class="dz-title">@T("claim.upload.drop")</div>
+                        <div class="dz-hint tiny muted">@T("claim.upload.hint")</div>
+                    </div>
+                    <ul class="dz-list" id="dropList" hidden></ul>
+                </label>
+                <div class="row" style="margin-top:10px;justify-content:flex-end">
+                    <button class="btn-ghost" type="submit" id="dropSubmit" disabled>@T("claim.uploadBtn")</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+</div>
+
+</div>
+
+<aside class="claim-rail decide">
+    <div class="actions" style="margin-top:0">
+    @if (c.Status == "settled")
+    {
+        <p class="tiny muted">@T("rail.settledNote")</p>
+    }
+    else
+    {
+        <form method="post" action="/claims/@c.Id/settle">
+            <button type="submit" class="btn primary" @(c.DecisionOutcome is null ? "disabled" : "")>@T("rail.approve")</button>
+        </form>
+    }
+    <a class="btn ghost" href="#handler">@T("rail.assign")</a>
+    </div>
+
+    <section class="rec @heroCls">
+        <div class="eyebrow">@T("rail.title")</div>
+        <div class="big">@(heroTitle is { Length: > 0 } ? heroTitle : c.Status)</div>
+        <p class="small">@(heroBody is { Length: > 0 } ? heroBody : T("rail.blocked"))</p>
+        @if (c.ExtractionConfidence is { } conf)
+        {
+            <div class="row" style="gap:8px;margin-top:14px">
+                <span class="tiny muted">@T("rail.confidence")</span>
+                <span class="thresh" style="flex:1"><span class="fill ok" style="width:@(W(conf))%"></span></span>
+                <span class="mono tiny">@conf.ToString("P0")</span>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="sect-lbl">@T("rail.proposal")</div>
+        <div class="stat"><span class="k">@T("rail.liability")</span>
+            <strong class="mono">@(ClaimModel.Str(Model.Liability, "scenario") ?? "—")</strong></div>
+        <div class="stat"><span class="k">@T("rail.reserve")</span>
+            <strong class="mono">@I18n.Money(c.EstimatedAmountEur)</strong></div>
+        <div class="stat"><span class="k">@T("rail.fraud")</span>
+            <strong class="mono" style="color:@(fraudHigh ? "var(--stop)" : "var(--ok)")">
+                @((c.FraudScore * 100).ToString("F0")) / @T(fraudHigh ? "rail.high" : "rail.low")</strong></div>
+        @if (c.CitationIntegrity is { } ci)
+        {
+            <div class="stat"><span class="k">@T("rail.integrity")</span><strong class="mono">@ci.ToString("P0")</strong></div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="sect-lbl">@T("rail.tasks")</div>
+        @if (Model.Reasons.Count == 0)
+        {
+            <p class="tiny muted" style="margin-top:8px">@T("rail.none")</p>
+        }
+        else
+        {
+            <ul class="plain tasklist">
+                @if (openGates.Count == 0)
+                {
+                    <li><span class="tick done">✓</span><span class="small">@T("rail.caseComplete")</span></li>
+                }
+                @foreach (var g in openGates.Take(5))
+                {
+                    <li><span class="tick"></span><span class="small">@g.Message</span></li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="card">
+        <div class="sect-lbl">@T("rail.next")</div>
+        <ol class="plain numlist">
+            @for (var i = 0; i < actions.Count && i < 4; i++)
+            {
+                <li><span class="num">@(i + 1)</span><span class="small">@actions[i].Title</span></li>
+            }
+        </ol>
+    </section>
+
+</aside>
+</div>
+
+@section Scripts {
+<script>
+  (function () {
+    const sel = document.getElementById('tplSelect');
+    if (!sel) return;
+    const to = document.getElementById('tplTo');
+    const subject = document.getElementById('tplSubject');
+    const body = document.getElementById('tplBody');
+    const id = document.getElementById('tplId');
+
+    sel.addEventListener('change', async () => {
+      id.value = sel.value;
+      if (!sel.value) { to.value = subject.value = body.value = ''; return; }
+      const r = await fetch('/api/email-template/render?claimId=@c.Id&templateId=' + encodeURIComponent(sel.value));
+      if (!r.ok) return;
+      const d = await r.json();
+      to.value = d.to || '';
+      subject.value = d.subject || '';
+      body.value = d.body || '';
+    });
+  })();
+
+  (function () {
+    const dz = document.getElementById('dropzone');
+    const input = document.getElementById('dropInput');
+    const list = document.getElementById('dropList');
+    const submit = document.getElementById('dropSubmit');
+    if (!dz || !input) return;
+
+    const kb = n => n < 1024 ? n + ' B' : n < 1048576 ? (n/1024).toFixed(1)+' KB' : (n/1048576).toFixed(1)+' MB';
+    const isImg = f => /^image\//.test(f.type);
+
+    function render() {
+      const files = Array.from(input.files || []);
+      list.innerHTML = '';
+      list.hidden = files.length === 0;
+      submit.disabled = files.length === 0;
+      files.forEach(f => {
+        const li = document.createElement('li');
+        li.className = 'dz-item';
+        if (isImg(f)) {
+          const img = document.createElement('img');
+          img.className = 'dz-thumb';
+          img.src = URL.createObjectURL(f);
+          img.onload = () => URL.revokeObjectURL(img.src);
+          li.appendChild(img);
+        } else {
+          const badge = document.createElement('span');
+          badge.className = 'dz-ext';
+          badge.textContent = (f.name.split('.').pop() || '?').toUpperCase().slice(0,4);
+          li.appendChild(badge);
+        }
+        const meta = document.createElement('div');
+        meta.className = 'dz-meta';
+        meta.innerHTML = '<div class="t">' + f.name.replace(/[<>&]/g,'') + '</div>' +
+                         '<div class="tiny muted">' + kb(f.size) + '</div>';
+        li.appendChild(meta);
+        list.appendChild(li);
+      });
+    }
+
+    input.addEventListener('change', render);
+
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => {
+      e.preventDefault(); dz.classList.add('over');
+    }));
+    ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+      e.preventDefault();
+      if (ev === 'dragleave' && dz.contains(e.relatedTarget)) return;
+      dz.classList.remove('over');
+    }));
+    dz.addEventListener('drop', e => {
+      const dt = new DataTransfer();
+      // keep already-selected files, append the drop
+      Array.from(input.files || []).forEach(f => dt.items.add(f));
+      Array.from(e.dataTransfer.files || []).forEach(f => dt.items.add(f));
+      input.files = dt.files;
+      render();
+    });
+  })();
+
+  (function () {
+    // Correspondence studio. Generate fills the draft card; nothing leaves the page
+    // until the handler submits the form — that POST is the approval.
+    const root = document.getElementById('correspondence');
+    const gen = root && document.getElementById('corrGenerate');
+    if (!gen) return;
+
+    const el = id => document.getElementById(id);
+    const draft = el('corrDraft'), fields = el('corrFields'), editBtn = el('corrEdit');
+    const recipient = el('corrRecipient'), channel = el('corrChannel'), err = el('corrError');
+
+    document.querySelectorAll('.tpl-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('on'));
+        card.classList.add('on');
+        el('corrTplId').value = card.dataset.tpl;
+      });
+    });
+
+    function defaultTo() { return recipient.selectedOptions[0].dataset.to || ''; }
+    function paint() {
+      el('corrSubjectView').textContent = el('corrSubject').value;
+      el('corrBodyView').textContent = el('corrBody').value;
+      el('corrToLabel').textContent = el('corrTo').value;
+      el('corrChannelLabel').textContent = channel.options[channel.selectedIndex].text;
+      el('corrChannelOut').value = channel.value;
+    }
+
+    editBtn.addEventListener('click', () => {
+      const opening = fields.hidden;
+      fields.hidden = !opening;
+      el('corrSubjectView').hidden = opening;
+      el('corrBodyView').hidden = opening;
+      editBtn.textContent = opening ? editBtn.dataset.done : editBtn.dataset.edit;
+      if (!opening) paint();
+    });
+
+    recipient.addEventListener('change', () => { el('corrTo').value = defaultTo(); paint(); });
+    channel.addEventListener('change', paint);
+
+    gen.addEventListener('click', async () => {
+      const label = gen.textContent;
+      gen.disabled = true; gen.textContent = gen.dataset.busy; err.hidden = true;
+      try {
+        const resp = await fetch('/api/claims/' + root.dataset.claim + '/draft-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: el('corrPrompt').value,
+            template_id: el('corrTplId').value,
+            recipient: recipient.value,
+            channel: channel.value,
+          }),
+        });
+        if (!resp.ok) throw new Error('draft failed: ' + resp.status);
+        const d = await resp.json();
+        el('corrSubject').value = d.subject || '';
+        el('corrBody').value = d.body || '';
+        if (!el('corrTo').value) el('corrTo').value = defaultTo();
+        paint();
+        draft.hidden = false;
+      } catch (e) {
+        err.hidden = false;
+      } finally {
+        gen.disabled = false; gen.textContent = label;
+      }
+    });
+  })();
+
+  (function () {
+    // Deep links from ClaimProgress's NextActions playbook ("#fraud",
+    // "#correspondence") point at sections now hidden inside tab panes —
+    // check the matching tab's radio before letting the browser scroll.
+    function syncTab() {
+      var hash = location.hash;
+      var radioId = hash === '#fraud' ? 'tab-fraud'
+                  : hash === '#correspondence' ? 'tab-emails'
+                  : hash === '#handler' ? 'tab-assessment' : null;
+      if (!radioId) return;
+      var radio = document.getElementById(radioId);
+      if (radio) radio.checked = true;
+    }
+    function scrollToHash() {
+      if (!location.hash) return;
+      var el = document.getElementById(location.hash.slice(1));
+      if (el) el.scrollIntoView();
+    }
+    document.addEventListener('DOMContentLoaded', () => { syncTab(); scrollToHash(); });
+    window.addEventListener('hashchange', () => { syncTab(); scrollToHash(); });
+    // Re-clicking a playbook link whose hash is already in the URL fires no
+    // hashchange — sync explicitly so the click always lands on the tab.
+    document.addEventListener('click', e => {
+      var a = e.target.closest && e.target.closest('a[href^="#"]');
+      if (a) setTimeout(() => { syncTab(); scrollToHash(); }, 0);
+    });
+  })();
+</script>
+}

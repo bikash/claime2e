@@ -1,0 +1,83 @@
+@page "/claims"
+@model ClaimsListModel
+@{
+    ViewData["Title"] = T("dash.population") + " · Boxora";
+    var p = Model.Period;
+    var q = $"from={p.From:yyyy-MM-dd}&to={p.To:yyyy-MM-dd}";
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <div class="label">@T("dash.population")</div>
+        <h1 class="mono">@Model.Scope</h1>
+        <div class="tiny muted">@p.From.ToString("yyyy-MM-dd") → @p.To.ToString("yyyy-MM-dd")</div>
+    </div>
+    <span class="row" style="gap:8px">
+        <a class="btn btn-ghost" href="/">@T("dash.backTo")</a>
+        @if (!Model.Denied)
+        {
+            <a class="btn btn-ghost tiny" href="/export/claims.csv?scope=@Model.Scope&@q">@T("dash.exportCsv")</a>
+        }
+    </span>
+</div>
+
+@if (Model.Denied)
+{
+    <section class="card" style="border-color:var(--stop);background:var(--stop-bg)">
+        <strong>@T("list.denied")</strong>
+        <p class="small" style="margin-top:6px">@T("list.deniedBody")</p>
+    </section>
+}
+else if (Model.Rows.Count == 0)
+{
+    <section class="card"><p class="small muted">@T("dash.emptyList")</p></section>
+}
+else
+{
+    <section class="card" style="padding:0;overflow:auto">
+        <table>
+            <thead>
+            <tr>
+                <th>@T("claim.label")</th>
+                <th>@T("col.policyholder")</th>
+                <th>@T("claim.assigned")</th>
+                <th class="num">@T("col.amount")</th>
+                <th class="num">@T("list.age")</th>
+                <th>@T("col.decision")</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var c in Model.Rows)
+            {
+                var breach = c.AgeWd > Metrics.SlaWorkingDays;
+                <tr class="clickable" onclick="location='/claims/@c.Id'">
+                    <td><strong>@c.ClaimNumber</strong></td>
+                    <td>@c.PolicyholderName</td>
+                    <td class="small">
+                        @(c.AssignedHandlerId is { Length: > 0 } h && Model.HandlerNames.TryGetValue(h, out var n)
+                            ? n : T("claim.unassigned"))
+                    </td>
+                    <td class="num mono">@I18n.Money(c.EstimatedAmountEur)</td>
+                    <td class="num mono @(breach ? "stopnum" : "")">
+                        @c.AgeWd
+                        @if (breach) { <span class="badge stop tiny"><span class="pip"></span>SLA</span> }
+                    </td>
+                    <td>
+                        @if (c.DecisionOutcome is { Length: > 0 } d)
+                        {
+                            <span class="badge @(d == "auto_approved" ? "ok" : d == "assisted" ? "warn" : "stop")">
+                                <span class="pip"></span>@T("decision." + (d == "auto_approved" ? "auto" : d))
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="tiny muted">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </section>
+    <p class="tiny muted" style="margin-top:10px">@T("list.count", Model.Rows.Count)</p>
+}

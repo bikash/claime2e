@@ -1,0 +1,191 @@
+@page "/workflows/{id}"
+@model WorkflowEditModel
+@{
+    var w = Model.Workflow;
+    ViewData["Title"] = w.Name + " · " + T("wf.title");
+    var kinds = new[] { "classify", "extract", "email", "crm_push", "webhook_call", "decision", "note" };
+    var placeholders = new Dictionary<string, string>
+    {
+        ["classify"]     = "{\"field\":\"category\",\"prompt\":\"Classify severity: minor/major/total_loss\"}",
+        ["extract"]      = "{\"fields\":[\"estimated_amount_eur\",\"loss_date\"]}",
+        ["email"]        = "{\"templateId\":\"tpl_acknowledge\",\"to\":\"policyholder@example.com\"}",
+        ["crm_push"]     = "{\"url\":\"https://crm.example.com/api/claims\",\"headers\":{\"Authorization\":\"env:CRM_TOKEN\"}}",
+        ["webhook_call"] = "{\"url\":\"https://hooks.example.com/claim\",\"method\":\"POST\"}",
+        ["decision"]     = "{}",
+        ["note"]         = "{\"body\":\"Reviewed by workflow.\"}",
+    };
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <div class="tiny muted">
+            <a href="/workflows">← @T("wf.title")</a>
+        </div>
+        <h1>@w.Name</h1>
+        <div class="tiny mono muted">@w.Id · @w.TriggerKind</div>
+    </div>
+    <span class="badge @(w.Active ? "ok" : "")">@(w.Active ? T("wf.active") : T("wf.inactive"))</span>
+</div>
+
+@if (Model.Notice is { Length: > 0 })
+{
+    <div class="card" style="border-color:var(--ok);background:var(--ok-bg);margin-bottom:16px">
+        <div class="small">@T("wf.notice." + Model.Notice.Split(':')[0])
+            @if (Model.Notice.Contains(':')) { <strong>· @Model.Notice.Split(':', 2)[1]</strong> }
+        </div>
+        @if (Model.RunError is { Length: > 0 })
+        {
+            <div class="tiny" style="color:var(--stop);margin-top:4px">@Model.RunError</div>
+        }
+    </div>
+}
+
+<div class="grid g2" style="align-items:flex-start">
+    <section class="card">
+        <h2>@T("wf.settings")</h2>
+        <form method="post" asp-page-handler="Save" class="stack">
+            <input type="hidden" name="id" value="@w.Id" />
+            <label class="field">
+                <span class="label">@T("wf.name")</span>
+                <input name="name" value="@w.Name" required />
+            </label>
+            <label class="field">
+                <span class="label">@T("wf.trigger")</span>
+                <select name="triggerKind">
+                    <option value="manual" selected="@(w.TriggerKind == "manual")">@T("wf.trigger.manual")</option>
+                    <option value="new_claim" selected="@(w.TriggerKind == "new_claim")">@T("wf.trigger.newClaim")</option>
+                </select>
+            </label>
+            <label class="check">
+                <input type="checkbox" name="active" value="true" checked="@w.Active" />
+                @T("wf.activeToggle")
+            </label>
+            <div style="text-align:right"><button type="submit">@T("wf.saveSettings")</button></div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>@T("wf.runNow")</h2>
+        <form method="post" asp-page-handler="Run" class="stack">
+            <input type="hidden" name="id" value="@w.Id" />
+            <label class="field">
+                <span class="label">@T("wf.pickClaim")</span>
+                <select name="claimId">
+                    <option value="">@T("wf.noClaim")</option>
+                    @foreach (var c in Model.RecentClaims)
+                    {
+                        <option value="@c.Id">@c.ClaimNumber — @c.PolicyholderName</option>
+                    }
+                </select>
+                <span class="tiny muted">@T("wf.pickClaimHint")</span>
+            </label>
+            <div style="text-align:right">
+                <button type="submit">@T("wf.run")</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<section class="card" style="margin-top:16px">
+    <div class="spread" style="margin-bottom:12px">
+        <h2>@T("wf.steps")</h2>
+        <button type="button" class="btn-ghost small" onclick="addStep()">+ @T("wf.addStep")</button>
+    </div>
+    <p class="sub small">@T("wf.stepsHint")</p>
+
+    <form method="post" asp-page-handler="SaveSteps" id="stepsForm">
+        <input type="hidden" name="id" value="@w.Id" />
+        <ol class="steps" id="stepsList">
+            @{ var display = Model.Steps.Count == 0 ? new List<WorkflowStep> { new() } : Model.Steps; }
+            @foreach (var s in display)
+            {
+                <li class="step-row">
+                    <span class="step-num"></span>
+                    <select name="kind" class="step-kind" onchange="hintFor(this)">
+                        <option value="">— @T("wf.kindPick") —</option>
+                        @foreach (var k in kinds)
+                        {
+                            <option value="@k" selected="@(s.Kind == k)">@k</option>
+                        }
+                    </select>
+                    <textarea name="config" rows="2" placeholder='{"…":"…"}'>@s.Config</textarea>
+                    <button type="button" class="btn-ghost small" onclick="this.closest('li').remove(); renumber();">✕</button>
+                </li>
+            }
+        </ol>
+        <div style="text-align:right;margin-top:12px">
+            <button type="submit">@T("wf.saveSteps")</button>
+        </div>
+    </form>
+</section>
+
+<section class="card" style="margin-top:16px">
+    <h2>@T("wf.recentRuns")</h2>
+    @if (Model.Runs.Count == 0)
+    {
+        <p class="small muted">@T("wf.noRuns")</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>@T("wf.when")</th>
+                    <th>@T("wf.claim")</th>
+                    <th>@T("wf.runStatus")</th>
+                    <th>@T("wf.error")</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in Model.Runs)
+            {
+                <tr>
+                    <td class="mono tiny" style="white-space:nowrap">@r.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>
+                        @if (r.ClaimId is null) { <text>—</text> }
+                        else { <a href="/claims/@r.ClaimId">@(r.ClaimNumber ?? r.ClaimId)</a> }
+                    </td>
+                    <td>
+                        <span class="badge @(r.Status == "ok" ? "ok" : r.Status == "error" ? "stop" : "warn")">
+                            @r.Status
+                        </span>
+                    </td>
+                    <td class="tiny muted">@(r.Error ?? "")</td>
+                </tr>
+                @if (r.Context is { Length: > 0 })
+                {
+                    <tr><td colspan="4">
+                        <details><summary class="tiny muted">@T("wf.showContext")</summary>
+                            <pre class="dump small">@r.Context</pre>
+                        </details>
+                    </td></tr>
+                }
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@section Scripts {
+<script>
+  const templates = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(placeholders));
+  function hintFor(sel) {
+    const li = sel.closest('li');
+    const cfg = li.querySelector('textarea');
+    if (!cfg.value.trim() && templates[sel.value]) cfg.value = templates[sel.value];
+    cfg.placeholder = templates[sel.value] || '{"…":"…"}';
+  }
+  function renumber() {
+    document.querySelectorAll('#stepsList .step-num').forEach((el, i) => el.textContent = (i + 1));
+  }
+  function addStep() {
+    const list = document.getElementById('stepsList');
+    const clone = list.querySelector('li').cloneNode(true);
+    clone.querySelector('select').value = '';
+    clone.querySelector('textarea').value = '';
+    list.appendChild(clone);
+    renumber();
+  }
+  renumber();
+</script>
+}

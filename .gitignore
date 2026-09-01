@@ -1,0 +1,17 @@
+.env
+bin/
+obj/
+uploads/*
+!uploads/.gitkeep
+.DS_Store
+
+# legacy Python original
+legacy-python/__pycache__/
+legacy-python/**/*.pyc
+.venv/
+venv/
+data/*.db
+data/*.db-journal
+.env*
+!.env.example
+.omc/

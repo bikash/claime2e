@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.venv/
+.omc/
+.env*
+uploads/
+legacy-python/
+frontend/node_modules/

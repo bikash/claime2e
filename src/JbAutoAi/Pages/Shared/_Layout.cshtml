@@ -1,0 +1,225 @@
+@{
+    var actorName = Auth.UserName(User);
+    var actorRole = Auth.UserRole(User).Replace('_', ' ');
+    var actorId = Auth.UserId(User);
+    var isSuper = Auth.IsSuperAdmin(User);
+    var isStaff = Auth.IsStaff(User);
+    var path = Context.Request.Path.Value ?? "/";
+    var returnUrl = path + Context.Request.QueryString;
+    // Longest matching nav path wins — otherwise /legal/admin lights up both
+    // "Law library" (/legal) and "Law admin" (/legal/admin).
+    var navPaths = new[] { "/", "/analytics", "/legal", "/audit", "/legal/admin", "/workflows", "/agents", "/fnol", "/claims" };
+    var activePath = navPaths
+        .Where(p => p == "/" ? path == "/"
+                             : path.Equals(p, StringComparison.OrdinalIgnoreCase)
+                            || path.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(p => p.Length)
+        .FirstOrDefault();
+    string Active(string p) => p == activePath ? "active" : "";
+    var claimCtx = ViewData["ClaimCtx"] as string;
+    var currentQuery = Context.Request.Query["q"].ToString();
+
+    List<ActivityEntry> notif = [];
+    int notifCount = 0;
+    if (isStaff)
+    {
+        var scope = isSuper ? null : (string.IsNullOrEmpty(actorId) ? null : actorId);
+        notif = Db.RecentForBell(scope, 8, 48);
+        notifCount = Db.CountForBell(scope, 24);
+    }
+}
+<!DOCTYPE html>
+<html lang="@I18n.Current">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] ?? "Boxora")</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/app.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2316232e'/><path fill='%23fff' fill-rule='evenodd' d='M13,10H24V18H21V25H35Q41,25,41,21.5Q41,18,35,18H33V10H39Q49,10,49,20V24Q49,33,40,33Q51,33,51,43V46Q51,56,41,56H13ZM21,41H36Q43,41,43,44.5Q43,48,36,48H21Z'/><rect x='25.5' y='3' width='6' height='22' rx='1' fill='%23d95d0f'/></svg>" />
+</head>
+<body class="@(isStaff ? "app" : "site")">
+<header class="topbar">
+    <a class="brand" href="/">
+        <span class="mk"><svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16232e"/><path fill="#fff" fill-rule="evenodd" d="M13 10H24V18H21V25H35Q41 25 41 21.5Q41 18 35 18H33V10H39Q49 10 49 20V24Q49 33 40 33Q51 33 51 43V46Q51 56 41 56H13ZM21 41H36Q43 41 43 44.5Q43 48 36 48H21Z"/><rect x="25.5" y="3" width="6" height="22" rx="1" fill="#d95d0f"/></svg></span>
+        <span>Boxora</span>
+    </a>
+
+    @if (isStaff)
+    {
+        <nav class="nav">
+            <a class="@Active("/")" href="/">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 12h8v9h-8zM3 15h8v6H3z"/></svg>
+                @T("nav.dashboard")
+            </a>
+            <a class="@Active("/analytics")" href="/analytics">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V10M11 21V4M16 21V13M21 21V7"/></svg>
+                @T("nav.analytics")
+            </a>
+            <a class="@Active("/agents")" href="/agents">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4M8 6h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2zM9 11h.01M15 11h.01M9.5 15h5M2 12h4M18 12h4"/></svg>
+                @T("nav.agents")
+            </a>
+            <a class="@Active("/audit")" href="/audit">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M3 6l1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/></svg>
+                @T("nav.audit")
+            </a>
+            @if (isSuper)
+            {
+                <span class="sep" aria-hidden="true"></span>
+                <a class="@Active("/legal")" href="/legal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h9l5 5v15H6zM14 2v6h6"/></svg>
+                    @T("nav.legal")
+                </a>
+                <a class="@Active("/legal/admin")" href="/legal/admin">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM8 4v16M12 9h5M12 13h5"/></svg>
+                    @T("nav.legalAdmin")
+                </a>
+                <a class="@Active("/workflows")" href="/workflows">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M7 7l2 2M15 15l2 2M7 17l2-2M15 9l2-2M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+                    @T("nav.workflows")
+                </a>
+            }
+        </nav>
+    }
+
+    <span class="spacer"></span>
+
+    @if (isStaff)
+    {
+        <form method="get" action="/" class="topsearch" role="search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="search" name="q" value="@currentQuery" autocomplete="off"
+                   placeholder="@T("idx.searchPlaceholder")" aria-label="@T("idx.search")" />
+        </form>
+    }
+
+    <div class="app-top-right">
+        @if (isStaff)
+        {
+            <a class="btn" href="/fnol" title="@T("nav.new")">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                <span class="new-label">@T("nav.new")</span>
+            </a>
+
+            <details class="notif">
+                <summary aria-label="@T("nav.notifications")">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                        <path d="M10 21a2 2 0 0 0 4 0"/>
+                    </svg>
+                    @if (notifCount > 0)
+                    {
+                        <span class="dot" aria-label="@notifCount">@(notifCount > 99 ? "99+" : notifCount.ToString())</span>
+                    }
+                </summary>
+                <div class="notif-panel">
+                    <div class="spread" style="padding:10px 12px;border-bottom:1px solid var(--line)">
+                        <strong class="small">@T("nav.notifications")</strong>
+                        <a class="tiny" href="/audit">@T("nav.viewAll")</a>
+                    </div>
+                    @if (notif.Count == 0)
+                    {
+                        <div class="tiny muted" style="padding:14px 12px">@T("nav.noNotifications")</div>
+                    }
+                    else
+                    {
+                        <ul class="plain notif-list">
+                            @foreach (var n in notif)
+                            {
+                                <li>
+                                    @* Agent-studio events have no claim — send those to the audit log. *@
+                                    <a href="@(n.ClaimId is { Length: > 0 } ? $"/claims/{n.ClaimId}" : "/audit")">
+                                        <div class="spread">
+                                            <span class="label">@n.KindLabel</span>
+                                            <span class="tiny muted">@n.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
+                                        </div>
+                                        <div class="small"><strong>@(n.ClaimNumber ?? (n.ClaimId is { Length: > 0 } ? n.ClaimId : T("ag.title")))</strong></div>
+                                        @if (n.Body is { Length: > 0 })
+                                        {
+                                            <div class="tiny muted">@(n.Body.Length > 90 ? n.Body[..90] + "…" : n.Body)</div>
+                                        }
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </details>
+        }
+
+        @if (isStaff)
+        {
+            <span class="role-pill">@actorRole</span>
+        }
+
+        <span class="langswitch" role="group" aria-label="@T("nav.language")">
+            @foreach (var code in I18n.Supported)
+            {
+                <a class="@(I18n.Current == code ? "on" : "")"
+                   href="/lang/@code?returnUrl=@Uri.EscapeDataString(returnUrl)">@code.ToUpperInvariant()</a>
+            }
+        </span>
+        @if (isStaff)
+        {
+            <span class="who">
+                <span class="av" aria-hidden="true">@(string.IsNullOrEmpty(actorName) ? "?" : actorName[..1].ToUpper())</span>
+                <span>@actorName</span>
+            </span>
+            <form method="post" action="/logout">
+                <button class="logout" type="submit">@T("login.logout")</button>
+            </form>
+        }
+    </div>
+</header>
+
+<div class="shell">
+    <main class="content">
+        <div class="app-wrap">
+            @RenderBody()
+        </div>
+    </main>
+</div>
+
+@if (isStaff)
+{
+    <button id="chatToggle" aria-label="@T("chat.title")" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+
+    <section id="chatPanel" class="chat-panel" data-chat hidden
+             data-drop="@T("chat.drop")" data-uploading="@T("chat.uploading")"
+             data-analyzing="@T("chat.analyzing")" data-decision="@T("chat.decision")"
+             data-settle="@T("chat.settle")" data-settled="@T("chat.settled")">
+        <header class="spread">
+            <div>
+                <strong>@T("chat.title")</strong>
+                <div class="tiny muted chat-hint">@T("chat.general")</div>
+            </div>
+            <span class="badge ok"><span class="pip"></span>online</span>
+        </header>
+        <div class="chat-messages" data-sources="@T("chat.sources")">
+            <div class="tiny muted">@T("chat.intro")</div>
+        </div>
+        <form class="chat-form">
+            <textarea class="chat-input" rows="1" placeholder="@T("chat.placeholder")"></textarea>
+            <button class="chat-send" type="submit">@T("chat.send")</button>
+        </form>
+    </section>
+}
+
+@if (isStaff && claimCtx is not null)
+{
+    <script id="claimCtx" type="application/json">@Html.Raw(claimCtx)</script>
+}
+<script src="~/chat.js" defer></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

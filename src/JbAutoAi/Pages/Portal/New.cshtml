@@ -1,0 +1,54 @@
+@page "/portal/new"
+@model JbAutoAi.Pages.Portal.NewModel
+@{
+    ViewData["Title"] = T("portal.new.title") + " · Boxora";
+    Layout = "_PortalLayout";
+}
+
+<h1>@T("portal.new.title")</h1>
+<p class="muted small" style="margin:6px 0 22px">@T("portal.new.intro")</p>
+
+<form method="post" class="card stack">
+    <div class="grid g2">
+        <label class="field">
+            <span class="label">@T("portal.new.plate")</span>
+            <input required asp-for="LicensePlate" placeholder="12-ABC-3" autocomplete="off" />
+        </label>
+        <label class="field">
+            <span class="label">@T("portal.new.policy")</span>
+            <input asp-for="PolicyNumber" autocomplete="off" />
+        </label>
+        <label class="field">
+            <span class="label">@T("portal.new.date")</span>
+            <input required type="date" asp-for="LossDate" />
+        </label>
+        <label class="field">
+            <span class="label">@T("portal.new.location")</span>
+            <input required asp-for="LossLocation" placeholder="@T("fnol.locationHint")" autocomplete="off" />
+        </label>
+    </div>
+
+    <label class="field">
+        <span class="label">@T("portal.new.description")</span>
+        <textarea required asp-for="Description" rows="5"
+                  placeholder="@T("portal.new.descriptionHint")"></textarea>
+    </label>
+
+    <div class="stack">
+        <label class="check">
+            <input type="checkbox" asp-for="ThirdPartyInvolved" />
+            @T("portal.new.thirdParty")
+        </label>
+        <label class="check">
+            <input type="checkbox" asp-for="Injuries" />
+            @T("portal.new.injuries")
+        </label>
+    </div>
+
+    <p class="tiny muted">@T("portal.new.injuryNote")</p>
+
+    <div class="row" style="justify-content:flex-end">
+        <a class="btn btn-ghost" href="/portal">@T("fnol.cancel")</a>
+        <button type="submit">@T("portal.new.submit")</button>
+    </div>
+</form>

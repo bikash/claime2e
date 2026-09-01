@@ -1,0 +1,119 @@
+@page "/portal/claims/{cid}"
+@model JbAutoAi.Pages.Portal.ClaimModel
+@{
+    var c = Model.Claim;
+    ViewData["Title"] = c.ClaimNumber + " · Boxora";
+    Layout = "_PortalLayout";
+    var state = PortalView.State(c);
+    var steps = PortalView.Steps(c);
+}
+
+<p class="small" style="margin-bottom:14px"><a href="/portal">@T("portal.back")</a></p>
+
+<div class="spread" style="margin-bottom:18px">
+    <div>
+        <div class="label">@c.ClaimNumber</div>
+        @if (c.LicensePlate is { Length: > 0 } lp)
+        {
+            <span class="plate big"><b>NL</b><span>@lp</span></span>
+        }
+        else
+        {
+            <h1>—</h1>
+        }
+        <div class="small muted">
+            @T("portal.reported") @c.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")
+        </div>
+    </div>
+    <span class="badge @state.Cls">@state.Label</span>
+</div>
+
+<section class="card" style="margin-bottom:16px">
+    <h2>@T("portal.progress")</h2>
+    <ol class="steps">
+        @foreach (var (label, done) in steps)
+        {
+            <li class="@(done ? "done" : "")"><span class="dot"></span>@label</li>
+        }
+    </ol>
+    <p class="small" style="margin:14px 0 0">@state.Message</p>
+</section>
+
+<section class="card" style="margin-bottom:16px">
+    <h2>@T("portal.details")</h2>
+    <div class="grid g2 small">
+        <div><div class="label">@T("portal.new.plate")</div>@(c.LicensePlate ?? "—")</div>
+        <div><div class="label">@T("portal.new.policy")</div>@(c.PolicyNumber ?? "—")</div>
+        <div><div class="label">@T("portal.new.date")</div>@(c.LossDate?.ToString("yyyy-MM-dd") ?? "—")</div>
+        <div><div class="label">@T("portal.new.location")</div>@(c.LossLocation ?? "—")</div>
+        <div class="span2">
+            <div class="label">@T("portal.new.description")</div>
+            <div class="pre">@c.Description</div>
+        </div>
+    </div>
+</section>
+
+<section class="card" style="margin-bottom:16px">
+    <h2>@T("portal.documents")</h2>
+    @if (Model.Documents.Count == 0)
+    {
+        <p class="small muted">@T("claim.documents.none")</p>
+    }
+    else
+    {
+        <ul class="plain" style="margin-bottom:16px">
+            @foreach (var d in Model.Documents)
+            {
+                <li class="item">
+                    <div>
+                        <div class="t">@d.Filename</div>
+                        <div class="tiny muted">@d.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                    <a class="small" href="/uploads/@string.Join('/', d.Filepath.Split('/').Select(Uri.EscapeDataString))">@T("claim.open")</a>
+                </li>
+            }
+        </ul>
+    }
+
+    <form method="post" action="/portal/claims/@c.Id/upload" enctype="multipart/form-data"
+          style="border-top:1px solid var(--line);padding-top:14px">
+        <div class="label" style="margin-bottom:6px">@T("portal.upload")</div>
+        <p class="tiny muted" style="margin:0 0 10px">@T("portal.uploadHint")</p>
+        <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.eml,.txt,.msg" />
+        <div style="margin-top:10px;text-align:right">
+            <button type="submit">@T("portal.uploadBtn")</button>
+        </div>
+    </form>
+</section>
+
+<section class="card" style="margin-bottom:16px">
+    <h2>@T("portal.comment")</h2>
+    <p class="sub">@T("portal.commentHint")</p>
+    <form method="post" action="/portal/claims/@c.Id/comment" class="stack">
+        <textarea name="body" rows="4" required maxlength="4000"></textarea>
+        <div style="text-align:right"><button type="submit">@T("portal.commentBtn")</button></div>
+    </form>
+</section>
+
+<section class="card">
+    <h2>@T("portal.timeline")</h2>
+    @if (Model.Timeline.Count == 0)
+    {
+        <p class="small muted">@T("claim.timeline.empty")</p>
+    }
+    else
+    {
+        <ul class="plain timeline">
+            @foreach (var e in Model.Timeline)
+            {
+                <li>
+                    <div class="spread">
+                        <span class="label">@PortalView.EventLabel(e)</span>
+                        <span class="tiny muted">@e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                    </div>
+                    <div class="small pre">@PortalView.EventText(e)</div>
+                </li>
+            }
+        </ul>
+    }
+</section>

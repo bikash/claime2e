@@ -1,0 +1,101 @@
+@page "/agents/{aid}/flow"
+@model AgentFlowModel
+@{
+    var a = Model.Agent;
+    ViewData["Title"] = $"{a.Name} · {T("flow.title")}";
+
+    // Palette: the trigger this agent already carries, its granted tools, then the
+    // generic step kinds. Nothing here is invented per-agent — it is the agent's own
+    // configuration, made draggable.
+    var palette = new List<(string Kind, string Label)>
+    {
+        ("trigger", T("ag.trigger") + ": " + T("ag.trigger." + a.TriggerKind)),
+        ("model", T("flow.node.model")),
+        ("rule", T("flow.node.rule")),
+        ("output", T("flow.node.suggestion")),
+        ("output", T("flow.node.email")),
+        ("output", T("flow.node.decision")),
+    };
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <div class="label">@T("flow.title")</div>
+        <h1>@a.Name</h1>
+        <div class="tiny muted">@T("flow.sub")</div>
+    </div>
+    <a class="btn" href="/agents">@T("flow.back")</a>
+</div>
+
+@if (Model.Notice == "saved")
+{
+    <div class="card" style="border-color:var(--ok);background:var(--ok-bg);margin-bottom:16px">
+        <strong>@T("flow.saved")</strong>
+    </div>
+}
+
+<form method="post" id="flowForm" data-flow="@a.Flow">
+    <input type="hidden" name="Flow" id="flowJson" />
+
+    <div class="flow-wrap">
+        <div class="card">
+            <div class="label" style="margin-bottom:8px">@T("flow.palette")</div>
+            @foreach (var (kind, label) in palette)
+            {
+                <button type="button" class="pal-item" data-kind="@kind" data-label="@label">
+                    <span class="dot @kind"></span>@label
+                </button>
+            }
+            @foreach (var tool in a.ToolList)
+            {
+                <button type="button" class="pal-item" data-kind="tool" data-label="@tool">
+                    <span class="dot tool"></span>@tool
+                </button>
+            }
+            <p class="tiny muted" style="margin-top:12px">@T("flow.hint")</p>
+
+            <p class="tiny muted" style="margin-top:12px">@T("flow.io.hint")</p>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden">
+            <div class="spread flow-bar">
+                <span class="tiny muted" id="flowCount" data-tpl="@T("flow.nodes")"></span>
+                <span class="row" style="gap:8px">
+                    <button type="button" class="btn" id="flowClear">@T("flow.clear")</button>
+                    <button type="submit">@T("flow.save")</button>
+                </span>
+            </div>
+            <div class="flow-canvas" id="flowCanvas">
+                <svg class="flow-edges" id="flowEdges"></svg>
+                <p class="tiny muted flow-empty" id="flowEmpty">@T("flow.empty")</p>
+            </div>
+        </div>
+    </div>
+</form>
+
+<dialog id="flowInspector" class="flow-modal">
+    <div class="label" style="margin-bottom:10px">@T("flow.inspector")</div>
+    <div class="lf-field">
+        <label for="fiLabel">@T("flow.io.label")</label>
+        <input type="text" id="fiLabel" />
+    </div>
+    <div class="lf-field">
+        <label for="fiInput">@T("flow.io.input")</label>
+        <input type="text" id="fiInput" placeholder="claim file, documents, …" />
+    </div>
+    <div class="lf-field">
+        <label for="fiOutput">@T("flow.io.output")</label>
+        <input type="text" id="fiOutput" placeholder="summary, decision, …" />
+    </div>
+    <div class="lf-field">
+        <label for="fiPrompt">@T("flow.io.prompt")</label>
+        <textarea id="fiPrompt" rows="6"></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button type="button" class="btn" id="fiDone">@T("flow.io.done")</button>
+    </div>
+</dialog>
+
+@section Scripts {
+    <script src="~/agentflow.js" defer></script>
+}

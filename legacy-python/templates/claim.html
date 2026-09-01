@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+{% block title %}{{ claim.claim_number }} · J&B auto AI{% endblock %}
+{% block content %}
+
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <div class="text-xs uppercase tracking-wide text-slate-500">Claim</div>
+    <h1 class="text-2xl font-semibold tracking-tight">{{ claim.claim_number }}</h1>
+    <p class="text-sm text-slate-500 mt-1">{{ claim.policyholder_name }} · {{ claim.license_plate or "—" }}</p>
+  </div>
+  <div class="flex items-center gap-3">
+    {% if assigned %}
+    <div class="text-right">
+      <div class="text-[10px] uppercase tracking-wide text-slate-500">Assigned to</div>
+      <div class="text-sm font-medium">{{ assigned.name }}</div>
+      <div class="text-xs text-slate-500">{{ assigned.role.replace('_', ' ') }}</div>
+    </div>
+    {% else %}
+    <span class="text-xs text-slate-400 italic">Unassigned</span>
+    {% endif %}
+    {% set out = claim.decision_outcome %}
+    {% if out == "auto_approved" %}
+      <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Auto-approved</span>
+    {% elif out == "assisted" %}
+      <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700"><span class="h-2 w-2 rounded-full bg-amber-500"></span>Assisted review</span>
+    {% elif out == "manual" %}
+      <span class="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-sm font-medium text-rose-700"><span class="h-2 w-2 rounded-full bg-rose-500"></span>Manual review</span>
+    {% else %}
+      <span class="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-sm font-medium text-slate-600"><span class="h-2 w-2 rounded-full bg-slate-400"></span>{{ claim.status }}</span>
+    {% endif %}
+  </div>
+</div>
+
+{# --- Decision hero --- #}
+{% if claim.decision_outcome %}
+{% set out = claim.decision_outcome %}
+<section class="mb-6 rounded-lg border
+  {% if out == 'auto_approved' %}border-emerald-200 bg-emerald-50
+  {% elif out == 'assisted' %}border-amber-200 bg-amber-50
+  {% else %}border-rose-200 bg-rose-50{% endif %} p-6">
+  <div class="flex items-start justify-between gap-6">
+    <div>
+      <div class="text-xs uppercase tracking-wide
+        {% if out == 'auto_approved' %}text-emerald-700
+        {% elif out == 'assisted' %}text-amber-700
+        {% else %}text-rose-700{% endif %}">Decision</div>
+      <h2 class="text-2xl font-semibold mt-1
+        {% if out == 'auto_approved' %}text-emerald-900
+        {% elif out == 'assisted' %}text-amber-900
+        {% else %}text-rose-900{% endif %}">
+        {% if out == 'auto_approved' %}Straight-through approved
+        {% elif out == 'assisted' %}Adjuster confirmation needed
+        {% else %}Manual review required{% endif %}
+      </h2>
+      <p class="text-sm mt-2 max-w-2xl
+        {% if out == 'auto_approved' %}text-emerald-800
+        {% elif out == 'assisted' %}text-amber-800
+        {% else %}text-rose-800{% endif %}">
+        {% if out == 'auto_approved' %}All rule gates passed. Payout can be released within the auto-approval envelope.
+        {% elif out == 'assisted' %}Soft rules failed but no hard blocker. Adjuster confirms and releases or escalates.
+        {% else %}Hard blocker triggered — injury, third-party liability, limitation, fraud, or date validity. LLM never denies; a human decides.{% endif %}
+      </p>
+    </div>
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div><div class="text-xs uppercase text-slate-500">Estimate</div>
+        <div class="text-lg font-semibold">{% if claim.estimated_amount_eur %}€ {{ "%.0f"|format(claim.estimated_amount_eur) }}{% else %}—{% endif %}</div></div>
+      <div><div class="text-xs uppercase text-slate-500">Confidence</div>
+        <div class="text-lg font-semibold">{% if claim.extraction_confidence is not none %}{{ "%.0f%%"|format(claim.extraction_confidence * 100) }}{% else %}—{% endif %}</div></div>
+      <div><div class="text-xs uppercase text-slate-500">Fraud</div>
+        <div class="text-lg font-semibold
+          {% if claim.fraud_score is not none and claim.fraud_score >= 0.3 %}text-rose-700
+          {% elif claim.fraud_score is not none and claim.fraud_score >= 0.15 %}text-amber-700
+          {% else %}text-emerald-700{% endif %}">
+          {% if claim.fraud_score is not none %}{{ "%.2f"|format(claim.fraud_score) }}{% else %}—{% endif %}
+        </div></div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- FNOL block -->
+  <section class="lg:col-span-2 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">FNOL</h2>
+    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+      <div><dt class="text-slate-500">Policy #</dt><dd>{{ claim.policy_number }}</dd></div>
+      <div><dt class="text-slate-500">VIN</dt><dd>{{ claim.vin or "—" }}</dd></div>
+      <div><dt class="text-slate-500">Loss date</dt><dd>{{ claim.loss_date }}</dd></div>
+      <div><dt class="text-slate-500">Loss location</dt><dd>{{ claim.loss_location }}</dd></div>
+      <div><dt class="text-slate-500">Third party</dt><dd>{{ "Yes" if claim.third_party_involved else "No" }}</dd></div>
+      <div><dt class="text-slate-500">Injuries</dt><dd>{{ "Yes" if claim.injuries else "No" }}</dd></div>
+      <div class="col-span-2"><dt class="text-slate-500">Police report #</dt><dd>{{ claim.police_report_number or "—" }}</dd></div>
+      <div class="col-span-2"><dt class="text-slate-500">Description</dt><dd class="whitespace-pre-wrap">{{ claim.description }}</dd></div>
+    </dl>
+    <form method="post" action="/claims/{{ claim.id }}/analyze" class="mt-5 flex justify-end">
+      <button class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+        {% if claim.decision_outcome %}Re-run analysis{% else %}Run analysis{% endif %}
+      </button>
+    </form>
+  </section>
+
+  <!-- Assessment -->
+  <section class="rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Assessment</h2>
+    {% set a = claim.assessment_parsed %}
+    {% if a %}
+    <dl class="space-y-2 text-sm">
+      <div class="flex justify-between"><dt class="text-slate-500">Severity</dt><dd class="font-medium">{{ a.severity or "—" }}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-500">Photos</dt><dd class="font-medium">{{ a.photo_count or 0 }}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-500">Estimate docs</dt><dd class="font-medium">{{ a.estimate_document_count or 0 }}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-500">Police report</dt><dd class="font-medium">{{ "Yes" if a.police_report_present else "No" }}</dd></div>
+    </dl>
+    <div class="mt-4">
+      <div class="text-xs uppercase text-slate-500 mb-1">Damage areas</div>
+      <div class="flex flex-wrap gap-1">
+        {% for cat in a.damage_areas or [] %}
+        <span class="rounded bg-stone-100 px-2 py-0.5 text-xs">{{ cat }}</span>
+        {% else %}
+        <span class="text-slate-400 text-xs">—</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">Upload documents and run analysis to see assessment.</p>
+    {% endif %}
+  </section>
+
+  <!-- Documents -->
+  <section class="lg:col-span-2 rounded-lg border border-stone-200 bg-white p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Documents & photos</h2>
+      <span class="text-xs text-slate-400">{{ documents|length }} file{{ "" if documents|length == 1 else "s" }}</span>
+    </div>
+    {% if documents %}
+    <ul class="space-y-2 mb-5">
+      {% for d in documents %}
+      <li class="flex items-center justify-between rounded-md border border-stone-100 px-3 py-2 hover:bg-stone-50">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="inline-block h-2 w-2 rounded-full
+            {% if d.doc_type == 'photo' %}bg-indigo-500
+            {% elif d.doc_type == 'repair_estimate' %}bg-emerald-500
+            {% elif d.doc_type == 'police_report' %}bg-slate-900
+            {% elif d.doc_type == 'aanrijdingsformulier' %}bg-amber-500
+            {% elif d.doc_type == 'email' %}bg-sky-500
+            {% else %}bg-slate-300{% endif %}"></span>
+          <div class="min-w-0">
+            <div class="text-sm font-medium truncate">{{ d.filename }}</div>
+            <div class="text-xs text-slate-500">{{ d.doc_type }}</div>
+          </div>
+        </div>
+        <a target="_blank" class="text-xs text-indigo-600 hover:underline" href="/{{ d.filepath }}">Open</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-slate-400 mb-5">No documents yet.</p>
+    {% endif %}
+    <form method="post" action="/claims/{{ claim.id }}/upload" enctype="multipart/form-data" class="border-t border-stone-100 pt-4">
+      <label class="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Upload repair estimate, photos, email, police report</label>
+      <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.eml,.txt,.msg" class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700" />
+      <div class="mt-3 flex justify-end">
+        <button class="rounded-md border border-stone-300 bg-white px-4 py-1.5 text-sm hover:bg-stone-50">Upload</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Fraud signals -->
+  <section class="rounded-lg border border-stone-200 bg-white p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Fraud signals</h2>
+      {% if claim.fraud_score is not none %}
+        <span class="text-xs px-2 py-0.5 rounded-full
+          {% if claim.fraud_score >= 0.3 %}bg-rose-100 text-rose-700
+          {% elif claim.fraud_score >= 0.15 %}bg-amber-100 text-amber-700
+          {% else %}bg-emerald-100 text-emerald-700{% endif %}">
+          score {{ "%.2f"|format(claim.fraud_score) }}
+        </span>
+      {% endif %}
+    </div>
+    {% if claim.fraud_signals_parsed %}
+    <ul class="space-y-3 text-sm">
+      {% for s in claim.fraud_signals_parsed %}
+      <li class="flex items-start gap-2">
+        <span class="mt-1 inline-block h-2 w-2 rounded-full shrink-0
+          {% if s.severity == 'high' %}bg-rose-500
+          {% elif s.severity == 'medium' %}bg-amber-500
+          {% else %}bg-slate-400{% endif %}"></span>
+        <div>
+          <div class="font-medium text-xs uppercase tracking-wide
+            {% if s.severity == 'high' %}text-rose-700
+            {% elif s.severity == 'medium' %}text-amber-700
+            {% else %}text-slate-600{% endif %}">{{ s.code }} · {{ s.severity }}</div>
+          <div class="text-slate-700">{{ s.message }}</div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-emerald-700">No fraud signals detected.</p>
+    {% endif %}
+  </section>
+
+  <!-- Handler workflow: assign / delegate / add note -->
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Handler workflow</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Assign -->
+      <form method="post" action="/claims/{{ claim.id }}/assign" class="space-y-2">
+        <label class="text-xs font-medium text-slate-600 uppercase tracking-wide">Assign to</label>
+        <select name="handler_id" class="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {% for h in handlers %}
+          <option value="{{ h.id }}" {% if assigned and assigned.id == h.id %}selected{% endif %}>{{ h.name }} — {{ h.role.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+        <button class="w-full rounded-md bg-slate-900 text-white px-3 py-2 text-sm hover:bg-slate-700">Assign</button>
+      </form>
+
+      <!-- Delegate -->
+      <form method="post" action="/claims/{{ claim.id }}/delegate" class="space-y-2">
+        <label class="text-xs font-medium text-slate-600 uppercase tracking-wide">Delegate to</label>
+        <select name="handler_id" class="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {% for h in handlers %}
+          <option value="{{ h.id }}">{{ h.name }} — {{ h.role.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="reason" placeholder="Reason (optional)"
+          class="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <button class="w-full rounded-md bg-indigo-600 text-white px-3 py-2 text-sm hover:bg-indigo-700">Delegate</button>
+      </form>
+
+      <!-- Add note -->
+      <form method="post" action="/claims/{{ claim.id }}/note" class="space-y-2">
+        <label class="text-xs font-medium text-slate-600 uppercase tracking-wide">Add note</label>
+        <textarea name="body" rows="3" required
+          placeholder="Add a handler note. Visible in the timeline."
+          class="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        <button class="w-full rounded-md border border-stone-300 bg-white text-slate-800 px-3 py-2 text-sm hover:bg-stone-50">Add note</button>
+      </form>
+    </div>
+    <div class="mt-4 text-xs text-slate-400">Acting as <span class="font-medium text-slate-600">{{ actor.name }}</span> ({{ actor.role.replace('_', ' ') }})</div>
+  </section>
+
+  <!-- Compose email from template -->
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Compose email</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1 space-y-2">
+        <label class="text-xs font-medium text-slate-600 uppercase tracking-wide">Template</label>
+        <select id="tplSelect" class="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">— pick a template —</option>
+          {% for t in email_templates %}
+          <option value="{{ t.id }}">[{{ t.audience }}] {{ t.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-slate-500">Variables like <code>{policyholder_name}</code> get filled with this claim + your handler profile. Saved to activity as a draft — no SMTP sending.</p>
+      </div>
+      <form method="post" action="/claims/{{ claim.id }}/email" class="lg:col-span-2 space-y-3">
+        <input type="hidden" name="template_id" id="tplHiddenId" />
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">To</span>
+          <input name="to" id="tplTo" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Subject</span>
+          <input name="subject" id="tplSubject" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Body</span>
+          <textarea name="body" id="tplBody" rows="10" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </label>
+        <div class="flex justify-end">
+          <button class="rounded-md bg-indigo-600 text-white px-4 py-2 text-sm hover:bg-indigo-700">Save draft to timeline</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Activity timeline -->
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Activity timeline</h2>
+    {% if activity %}
+    <ul class="space-y-3">
+      {% for e in activity %}
+      <li class="flex items-start gap-3 border-b border-stone-100 last:border-none pb-3 last:pb-0">
+        <span class="mt-1 inline-block h-2 w-2 rounded-full shrink-0
+          {% if e.kind == 'note' %}bg-slate-400
+          {% elif e.kind == 'assigned' %}bg-indigo-500
+          {% elif e.kind == 'delegated' %}bg-amber-500
+          {% elif e.kind == 'email_saved' %}bg-sky-500
+          {% elif e.kind == 'decision' %}bg-emerald-500
+          {% else %}bg-slate-300{% endif %}"></span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <div class="text-xs uppercase tracking-wide text-slate-500">
+              {{ e.kind.replace('_', ' ') }}
+              {% if e.actor_name %} · {{ e.actor_name }}{% elif e.actor_handler_id is none %} · system{% endif %}
+            </div>
+            <div class="text-xs text-slate-400">{{ e.created_at }}</div>
+          </div>
+          <div class="text-sm mt-1 whitespace-pre-wrap">{{ e.body }}</div>
+          {% if e.kind == 'email_saved' and e.meta_parsed %}
+            <details class="mt-2">
+              <summary class="text-xs text-indigo-600 cursor-pointer">Show draft email</summary>
+              <div class="mt-2 rounded-md bg-stone-50 border border-stone-200 p-3 text-xs">
+                <div><strong>To:</strong> {{ e.meta_parsed.to }}</div>
+                <div><strong>Subject:</strong> {{ e.meta_parsed.subject }}</div>
+                <pre class="mt-2 whitespace-pre-wrap">{{ e.meta_parsed.body }}</pre>
+              </div>
+            </details>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-slate-400">No activity yet. Assign, delegate, or add a note above.</p>
+    {% endif %}
+  </section>
+
+  <!-- Rule checks -->
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Rule checks (Dutch motor law)</h2>
+    {% if claim.decision_reasons_parsed %}
+    <ul class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      {% for r in claim.decision_reasons_parsed %}
+      <li class="flex items-start gap-2 rounded border border-stone-100 p-3">
+        {% if r.ok %}
+        <span class="mt-1 inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
+        {% else %}
+        <span class="mt-1 inline-block h-2 w-2 rounded-full bg-rose-500 shrink-0"></span>
+        {% endif %}
+        <div>
+          <div class="font-medium text-xs uppercase tracking-wide text-slate-600">{{ r.code }}</div>
+          <div class="text-slate-700">{{ r.message }}</div>
+          {% if r.legal_ref %}<div class="text-xs text-slate-400 mt-0.5">{{ r.legal_ref }}</div>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-slate-400">Run analysis to evaluate rules.</p>
+    {% endif %}
+  </section>
+
+  <!-- LLM summary -->
+  {% if claim.summary %}
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">Adjuster summary</h2>
+    <div class="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap">{{ claim.summary }}</div>
+    <p class="mt-4 text-xs text-slate-400">Generated by LLM for adjuster context only. Decision itself comes from deterministic rule engine.</p>
+  </section>
+  {% endif %}
+
+  {% if claim.rules_trace %}
+  <section class="lg:col-span-3 rounded-lg border border-stone-200 bg-white p-6">
+    <details>
+      <summary class="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-500">Rules trace (audit)</summary>
+      <pre class="mt-3 text-xs bg-stone-50 rounded-md p-3 overflow-x-auto">{{ claim.rules_trace }}</pre>
+    </details>
+  </section>
+  {% endif %}
+
+</div>
+
+<script>
+  // Expose current claim to the chatbot widget in base.html.
+  window.__CLAIM_CTX = {
+    id: {{ claim.id|tojson }},
+    claim_number: {{ claim.claim_number|tojson }},
+    policyholder_name: {{ claim.policyholder_name|tojson }},
+    license_plate: {{ claim.license_plate|tojson }},
+    decision_outcome: {{ claim.decision_outcome|tojson }}
+  };
+
+  // Email-template picker: fetch rendered content and populate form.
+  (function() {
+    const sel = document.getElementById('tplSelect');
+    const to = document.getElementById('tplTo');
+    const subj = document.getElementById('tplSubject');
+    const body = document.getElementById('tplBody');
+    const hid = document.getElementById('tplHiddenId');
+    if (!sel) return;
+    sel.addEventListener('change', async () => {
+      const id = sel.value;
+      hid.value = id;
+      if (!id) { to.value = subj.value = body.value = ''; return; }
+      const r = await fetch(`/api/email-template/render?claim_id={{ claim.id }}&template_id=${encodeURIComponent(id)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      to.value = d.to || '';
+      subj.value = d.subject || '';
+      body.value = d.body || '';
+    });
+  })();
+</script>
+{% endblock %}

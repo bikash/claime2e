@@ -1,0 +1,10 @@
+/* Minimal palette overrides — Tailwind CDN handles the rest. */
+:root {
+  --accent: #4F46E5;
+  --bg: #FAFAF9;
+  --surface: #FFFFFF;
+  --muted: #64748B;
+}
+body { font-feature-settings: "ss01", "cv11"; }
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }

@@ -1,0 +1,372 @@
+@model IndexModel
+@{
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var maxDay = Model.ClaimsByDay.Select(d => d.Total).DefaultIfEmpty(0).Max();
+    var maxCost = Model.CostByDay.Select(d => d.CostUsd).DefaultIfEmpty(0).Max();
+    int Pct(int v) => maxDay <= 0 ? 0 : v * 100 / maxDay;
+
+    (string Cls, string Text) Decision(string? outcome) => outcome switch
+    {
+        "auto_approved" => ("ok",   T("decision.auto")),
+        "assisted"      => ("warn", T("decision.assisted")),
+        "manual"        => ("stop", T("decision.manual")),
+        _               => ("",     ""),
+    };
+}
+
+<div class="between" style="margin-bottom:20px">
+    <h1>@T("idx.title")</h1>
+    <a href="/fnol">@T("idx.register")</a>
+</div>
+
+<form method="get" class="searchbar" role="search">
+    <input type="search" name="q" value="@Model.Query" autocomplete="off"
+           placeholder="@T("idx.searchPlaceholder")" aria-label="@T("idx.search")" />
+    <button type="submit">@T("idx.search")</button>
+    @if (Model.Query.Length > 0)
+    {
+        <a class="btn btn-ghost" href="/">@T("idx.clear")</a>
+    }
+</form>
+
+<div class="grid g4" style="margin-bottom:16px">
+    <div class="kpi" data-tone="clay">
+        <div class="label">@T("kpi.claims")</div>
+        <div class="n">@Model.StpSum.Total</div>
+        <div class="foot">@T("kpi.claimsFoot", Model.StpSum.Pending)</div>
+    </div>
+    <div class="kpi" data-tone="ok">
+        <div class="label">@T("kpi.stp")</div>
+        <div class="n">@Model.StpSum.StpRate.ToString("P1")</div>
+        <div class="foot">@T("kpi.stpFoot", Model.StpSum.Stp, Model.StpSum.Decided)</div>
+    </div>
+    <div class="kpi" data-tone="@(Model.Citations.Integrity >= 0.98 ? "ok" : "warn")">
+        <div class="label">@T("kpi.integrity")</div>
+        <div class="n">@Model.Citations.Integrity.ToString("P0")</div>
+        <div class="foot">@T("kpi.integrityFoot", Model.Citations.Unresolved, Model.Citations.TotalCitations)</div>
+    </div>
+    <div class="kpi" data-tone="ink">
+        <div class="label">@T("kpi.spend")</div>
+        <div class="n">$@Model.Usage.TodayUsd.ToString("F4")</div>
+        <div class="foot">
+            @T("kpi.spendFoot", Model.Usage.MonthUsd.ToString("F4"), Model.Usage.TotalUsd.ToString("F4"))
+        </div>
+    </div>
+</div>
+
+<div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("chart.claimsPerDay")</h2>
+            <div class="legend">
+                <span><i style="background:#6FA187"></i>@T("col.stp")</span>
+                <span><i style="background:#D6B04B"></i>@T("col.assisted")</span>
+                <span><i style="background:#D97757"></i>@T("col.manual")</span>
+            </div>
+        </div>
+        @if (Model.ClaimsByDay.Count == 0)
+        {
+            <p class="empty">@T("empty.noData")</p>
+        }
+        else
+        {
+            <div class="bars">
+                @foreach (var d in Model.ClaimsByDay)
+                {
+                    var other = d.Total - d.Stp - d.Assisted - d.Manual;
+                    <div class="col" title="@d.Day: @d.Total">
+                        @if (other > 0)
+                        {
+                            <div class="seg none" style="height:@(Pct(other))%"></div>
+                        }
+                        @if (d.Manual > 0)
+                        {
+                            <div class="seg stop" style="height:@(Pct(d.Manual))%"></div>
+                        }
+                        @if (d.Assisted > 0)
+                        {
+                            <div class="seg warn" style="height:@(Pct(d.Assisted))%"></div>
+                        }
+                        @if (d.Stp > 0)
+                        {
+                            <div class="seg ok" style="height:@(Pct(d.Stp))%"></div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="axis">
+                @foreach (var d in Model.ClaimsByDay)
+                {
+                    <span>@d.Day.ToString("dd/MM")</span>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("chart.costPerDay")</h2>
+            <span class="tiny muted">@T("chart.peak", maxCost.ToString("F4"))</span>
+        </div>
+        @if (Model.CostByDay.Count < 2)
+        {
+            <p class="empty">@T("chart.tooFewPoints")</p>
+        }
+        else
+        {
+            var n = Model.CostByDay.Count;
+            var pts = string.Join(' ', Model.CostByDay.Select((d, i) =>
+            {
+                var x = (i * 100.0 / (n - 1)).ToString("F2", inv);
+                var y = (100 - (maxCost <= 0 ? 0 : d.CostUsd / maxCost * 92)).ToString("F2", inv);
+                return $"{x},{y}";
+            }));
+            <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none" role="img"
+                 aria-label="@T("chart.costPerDay")">
+                <polygon points="0,100 @pts 100,100" fill="rgba(217,119,87,0.12)" />
+                <polyline points="@pts" fill="none" stroke="#D97757" stroke-width="1.5"
+                          vector-effect="non-scaling-stroke" />
+            </svg>
+            <div class="axis">
+                @foreach (var d in Model.CostByDay)
+                {
+                    <span>@d.Day.ToString("dd/MM")</span>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+        <h2>@T("card.claimsPerMonth")</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>@T("col.month")</th><th class="num">@T("col.total")</th>
+                <th class="num">@T("col.stp")</th><th class="num">@T("col.assisted")</th>
+                <th class="num">@T("col.manual")</th>
+            </tr>
+            </thead>
+            <tbody>
+            @if (Model.ClaimsByMonth.Count == 0)
+            {
+                <tr><td colspan="5" class="empty">@T("empty.noData")</td></tr>
+            }
+            @foreach (var m in Model.ClaimsByMonth)
+            {
+                <tr>
+                    <td>@m.Month</td>
+                    <td class="num">@m.Total</td>
+                    <td class="num">@m.Stp</td>
+                    <td class="num">@m.Assisted</td>
+                    <td class="num">@m.Manual</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>@T("card.corpusCosts")</h2>
+        <div class="stack small">
+            <div class="spread">
+                <span class="muted">@T("corpus.active")</span>
+                <span class="badge clay">@(Model.Citations.CorpusVersion ?? T("legal.noCorpus"))</span>
+            </div>
+            <div class="spread">
+                <span class="muted">@T("corpus.indexed")</span>
+                <strong>@T("corpus.vectorised", Model.Citations.CorpusEmbedded, Model.Citations.CorpusChunks)</strong>
+            </div>
+            <div class="spread">
+                <span class="muted">@T("corpus.claimsWithCitations")</span>
+                <strong>@Model.Citations.ClaimsWithCitations</strong>
+            </div>
+        </div>
+        <table style="margin-top:14px">
+            <thead><tr><th>@T("col.month")</th><th class="num">@T("col.calls")</th><th class="num">@T("col.usd")</th></tr></thead>
+            <tbody>
+            @if (Model.CostByMonth.Count == 0)
+            {
+                <tr><td colspan="3" class="empty">@T("empty.noSpend")</td></tr>
+            }
+            @foreach (var m in Model.CostByMonth)
+            {
+                <tr><td>@m.Month</td><td class="num">@m.Calls</td><td class="num">$@m.CostUsd.ToString("F4")</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="spread" style="margin-bottom:12px">
+        <h2>@(Model.Query.Length > 0
+            ? T("idx.searchResults", Model.Claims.Count, Model.Query)
+            : T("card.recent"))</h2>
+        <span class="tiny muted">
+            @if (Model.Query.Length > 0)
+            {
+                @T("idx.searchHint")
+            }
+            else
+            {
+                @T("idx.pageInfo", Model.CurrentPage, Model.TotalPages, Model.TotalClaims)
+            }
+        </span>
+    </div>
+
+    <form method="post" action="/claims/bulk-assign" id="bulkForm">
+        <div class="bulkbar" id="bulkBar" hidden>
+            <span class="tiny"><strong id="bulkCount">0</strong> @T("idx.bulk.selected")</span>
+            <select name="handlerId" required>
+                <option value="">@T("idx.bulk.pickHandler")</option>
+                @foreach (var h in Model.Handlers)
+                {
+                    <option value="@h.Id">@h.Name — @h.RoleLabel</option>
+                }
+            </select>
+            <button type="submit">@T("idx.bulk.assign")</button>
+            <button type="button" class="btn-ghost" id="bulkClear">@T("idx.bulk.clear")</button>
+        </div>
+
+        <table class="checktbl">
+            <thead>
+            <tr>
+                <th class="chk"><input type="checkbox" id="chkAll" aria-label="@T("idx.bulk.selectAll")" /></th>
+                <th>@T("col.claim")</th><th>@T("col.holder")</th><th>@T("col.plate")</th>
+                <th>@T("col.lossDate")</th><th class="num">@T("col.amount")</th>
+                <th class="num">@T("col.citations")</th><th>@T("col.decision")</th>
+            </tr>
+            </thead>
+            <tbody>
+            @if (Model.Claims.Count == 0)
+            {
+                <tr>
+                    <td colspan="8" class="empty">
+                        @(Model.Query.Length > 0
+                            ? T("idx.noResults")
+                            : Html.Raw(T("empty.noClaims") + " <a href=\"/fnol\">" + T("empty.registerFirst") + "</a>"))
+                    </td>
+                </tr>
+            }
+            @foreach (var c in Model.Claims)
+            {
+                var d = Decision(c.DecisionOutcome);
+                var initial = string.IsNullOrEmpty(c.PolicyholderName) ? "?" : c.PolicyholderName[..1].ToUpper();
+                <tr class="clickable decision-@(d.Cls.Length > 0 ? d.Cls : "none")">
+                    <td class="chk">
+                        <input type="checkbox" name="claimIds" value="@c.Id" class="rowchk"
+                               aria-label="@T("idx.bulk.selectRow", c.ClaimNumber)" />
+                    </td>
+                    <td onclick="location='/claims/@c.Id'"><strong>@c.ClaimNumber</strong></td>
+                    <td onclick="location='/claims/@c.Id'">
+                        <span class="avatar" aria-hidden="true">@initial</span>@c.PolicyholderName
+                    </td>
+                    <td onclick="location='/claims/@c.Id'">
+                        @if (c.LicensePlate is { Length: > 0 } lp)
+                        {
+                            <span class="plate"><b>NL</b><span>@lp</span></span>
+                        }
+                        else
+                        {
+                            <span class="muted">—</span>
+                        }
+                    </td>
+                    <td class="muted" onclick="location='/claims/@c.Id'">@(c.LossDate?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    <td class="num" onclick="location='/claims/@c.Id'">@I18n.Money(c.EstimatedAmountEur)</td>
+                    <td class="num" onclick="location='/claims/@c.Id'">
+                        @if (c.CitationIntegrity is { } ci)
+                        {
+                            <span class="badge @(ci >= 1.0 ? "ok" : "stop")">@ci.ToString("P0")</span>
+                        }
+                        else
+                        {
+                            <span class="muted">—</span>
+                        }
+                    </td>
+                    <td onclick="location='/claims/@c.Id'">
+                        @if (d.Cls.Length > 0)
+                        {
+                            <span class="badge @d.Cls"><span class="pip"></span>@d.Text</span>
+                        }
+                        else
+                        {
+                            <span class="tiny muted">@c.Status</span>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </form>
+
+    @if (Model.Query.Length == 0 && Model.TotalPages > 1)
+    {
+        <nav class="pager" aria-label="pagination">
+            @{
+                var last = Model.TotalPages;
+                var cur = Model.CurrentPage;
+                var win = new List<int>();
+                win.Add(1);
+                for (int p = cur - 2; p <= cur + 2; p++) if (p > 1 && p < last) win.Add(p);
+                if (last > 1) win.Add(last);
+                win = win.Distinct().OrderBy(x => x).ToList();
+            }
+            @if (cur > 1)
+            {
+                <a href="/?page=@(cur - 1)" aria-label="prev">‹</a>
+            }
+            else
+            {
+                <span class="disabled">‹</span>
+            }
+            @{ int prev = 0; }
+            @foreach (var p in win)
+            {
+                if (prev > 0 && p - prev > 1) { <span class="disabled">…</span> }
+                if (p == cur) { <span class="current">@p</span> }
+                else { <a href="/?page=@p">@p</a> }
+                prev = p;
+            }
+            @if (cur < last)
+            {
+                <a href="/?page=@(cur + 1)" aria-label="next">›</a>
+            }
+            else
+            {
+                <span class="disabled">›</span>
+            }
+        </nav>
+    }
+</div>
+
+@section Scripts {
+<script>
+  (function () {
+    const form = document.getElementById('bulkForm');
+    if (!form) return;
+    const bar = document.getElementById('bulkBar');
+    const count = document.getElementById('bulkCount');
+    const all = document.getElementById('chkAll');
+    const rows = () => form.querySelectorAll('.rowchk');
+    const sync = () => {
+      const n = form.querySelectorAll('.rowchk:checked').length;
+      count.textContent = n;
+      bar.hidden = n === 0;
+      const total = rows().length;
+      all.checked = n > 0 && n === total;
+      all.indeterminate = n > 0 && n < total;
+    };
+    all?.addEventListener('change', () => {
+      rows().forEach(r => r.checked = all.checked);
+      sync();
+    });
+    form.addEventListener('change', e => { if (e.target.classList.contains('rowchk')) sync(); });
+    document.getElementById('bulkClear').addEventListener('click', () => {
+      rows().forEach(r => r.checked = false); sync();
+    });
+    sync();
+  })();
+</script>
+}

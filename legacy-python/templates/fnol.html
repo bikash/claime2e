@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Register FNOL · J&B auto AI{% endblock %}
+{% block content %}
+<div class="max-w-2xl">
+  <h1 class="text-2xl font-semibold tracking-tight mb-1">First Notice of Loss</h1>
+  <p class="text-sm text-slate-500 mb-6">Fill in what you know. You can attach documents and photos on the next screen.</p>
+
+  <form method="post" action="/fnol" class="space-y-5 rounded-lg border border-stone-200 bg-white p-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Policyholder</span>
+        <input required name="policyholder_name" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Policy number</span>
+        <input required name="policy_number" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">License plate</span>
+        <input required name="license_plate" placeholder="e.g. 12-ABC-3" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">VIN (optional)</span>
+        <input name="vin" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Loss date</span>
+        <input required type="date" name="loss_date" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Loss location</span>
+        <input required name="loss_location" placeholder="City / road" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+    </div>
+
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Description</span>
+      <textarea required name="description" rows="4" placeholder="What happened, where, and how." class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+    </label>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+      <label class="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="third_party_involved" value="true" class="rounded border-stone-300 text-indigo-600 focus:ring-indigo-500" />
+        Third-party involved
+      </label>
+      <label class="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="injuries" value="true" class="rounded border-stone-300 text-indigo-600 focus:ring-indigo-500" />
+        Injuries reported
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600 uppercase tracking-wide">Police report #</span>
+        <input name="police_report_number" class="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-2">
+      <a href="/" class="text-sm text-slate-500 hover:text-slate-800">Cancel</a>
+      <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Register claim</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

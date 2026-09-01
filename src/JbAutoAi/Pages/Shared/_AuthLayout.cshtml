@@ -1,0 +1,51 @@
+@{
+    var path = Context.Request.Path.Value ?? "/";
+    var returnUrl = path + Context.Request.QueryString;
+}
+<!DOCTYPE html>
+<html lang="@I18n.Current">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] ?? "Boxora")</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/app.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2316232e'/><path fill='%23fff' fill-rule='evenodd' d='M13,10H24V18H21V25H35Q41,25,41,21.5Q41,18,35,18H33V10H39Q49,10,49,20V24Q49,33,40,33Q51,33,51,43V46Q51,56,41,56H13ZM21,41H36Q43,41,43,44.5Q43,48,36,48H21Z'/><rect x='25.5' y='3' width='6' height='22' rx='1' fill='%23d95d0f'/></svg>" />
+</head>
+<body class="auth">
+<div class="login">
+    <aside class="login-hero">
+        <div class="brand"><span class="mk"><svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16232e"/><path fill="#fff" fill-rule="evenodd" d="M13 10H24V18H21V25H35Q41 25 41 21.5Q41 18 35 18H33V10H39Q49 10 49 20V24Q49 33 40 33Q51 33 51 43V46Q51 56 41 56H13ZM21 41H36Q43 41 43 44.5Q43 48 36 48H21Z"/><rect x="25.5" y="3" width="6" height="22" rx="1" fill="#d95d0f"/></svg></span> Boxora</div>
+        <div>
+            <h1>@T("auth.heroH")</h1>
+            <p>@T("auth.heroP")</p>
+            <div class="feats">
+                <span class="ft">@T("auth.f1")</span>
+                <span class="ft">@T("auth.f2")</span>
+                <span class="ft">@T("auth.f3")</span>
+                <span class="ft">@T("auth.f4")</span>
+            </div>
+        </div>
+        <div class="foot">AVG · Wft · EU AI Act · PIFI</div>
+    </aside>
+
+    <main class="login-form">
+        <div class="lf-inner">
+            <div class="top">
+                <h2>@(ViewData["AuthHeading"] ?? T("login.staffTitle"))</h2>
+                <span class="langswitch">
+                    @foreach (var code in I18n.Supported)
+                    {
+                        <a class="@(I18n.Current == code ? "on" : "")"
+                           href="/lang/@code?returnUrl=@Uri.EscapeDataString(returnUrl)">@code.ToUpperInvariant()</a>
+                    }
+                </span>
+            </div>
+            @RenderBody()
+        </div>
+    </main>
+</div>
+</body>
+</html>

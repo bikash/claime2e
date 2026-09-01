@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <!-- Machine has only the .NET 10 runtime installed; let the net9.0 app run on it. -->
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>JbAutoAi</RootNamespace>
+    <!-- ICU is needed for the nl/en UI cultures. Formatting stays invariant —
+         see CultureInfo.DefaultThreadCurrentCulture in Program.cs. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Schema.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.0" />
+  </ItemGroup>
+
+</Project>

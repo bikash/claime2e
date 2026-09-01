@@ -1,0 +1,65 @@
+@page "/login"
+@model LoginModel
+@{
+    ViewData["Title"] = T("login.staffTitle") + " · Boxora";
+    ViewData["AuthHeading"] = T("login.staffTitle");
+    Layout = "_AuthLayout";
+
+    // Demo shortcut: one card per staff role. Each is its own tiny form so the click
+    // posts a complete credential pair — no JS, and the real form stays the real form.
+    string Initials(string name) => string.Concat(
+        name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => p[0])).ToUpper();
+    string Colour(string role) => role switch
+    {
+        "super_admin" => "#6B45D6",
+        "team_manager" => "#0E7B6E",
+        "cfo" => "#A65B0B",
+        "fraud_specialist" => "#B4362C",
+        "senior_adjuster" => "#2A4FE0",
+        _ => "#3E566F",
+    };
+}
+
+<p class="sub">@T("login.staffIntro")</p>
+
+@if (Model.Error is { } err)
+{
+    <div class="ro-banner" style="background:var(--neg-soft);border-color:#E6C4C0;color:var(--neg)">@err</div>
+}
+
+<form method="post">
+    <div class="lf-field">
+        <label asp-for="Email">@T("login.email")</label>
+        <input type="email" asp-for="Email" required autocomplete="username" autofocus />
+    </div>
+    <div class="lf-field">
+        <label asp-for="Password">@T("login.password")</label>
+        <input type="password" asp-for="Password" required autocomplete="current-password" />
+    </div>
+    <input type="hidden" asp-for="ReturnUrl" />
+    <button class="btn blue" style="width:100%" type="submit">@T("login.submit")</button>
+</form>
+
+<div class="demo-lbl">@T("login.demoAccounts")</div>
+<div class="roles">
+    @foreach (var h in Model.DemoAccounts)
+    {
+        <form method="post">
+            <input type="hidden" name="Email" value="@h.Email" />
+            <input type="hidden" name="Password" value="@Db.DemoPassword" />
+            <input type="hidden" asp-for="ReturnUrl" />
+            <button class="role-card" type="submit">
+                <span class="av" style="background:@Colour(h.Role)">@Initials(h.Name)</span>
+                <span>
+                    <span class="rn">@h.Name</span>
+                    <span class="rr">@h.RoleLabel</span>
+                </span>
+            </button>
+        </form>
+    }
+</div>
+
+<p class="tiny muted" style="margin-top:16px">
+    @T("login.demoPassword") <code class="mono">@Db.DemoPassword</code> ·
+    @T("login.toPortal") <a href="/portal/login">@T("login.toPortalLink")</a>
+</p>

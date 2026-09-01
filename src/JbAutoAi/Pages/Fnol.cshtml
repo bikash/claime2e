@@ -1,0 +1,97 @@
+@page "/fnol"
+@model FnolModel
+@{
+    ViewData["Title"] = T("fnol.title") + " · Boxora";
+}
+
+<div style="max-width:680px">
+    <h1>@T("fnol.title")</h1>
+    <p class="muted" style="margin:6px 0 22px">@T("fnol.intro")</p>
+
+    <form method="post" class="card stack">
+        <div class="grid g2">
+            <label class="field">
+                <span class="label">@T("fnol.holder")</span>
+                <input required asp-for="PolicyholderName" autocomplete="off" />
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.policy")</span>
+                <input required asp-for="PolicyNumber" autocomplete="off" />
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.plate")</span>
+                <input required asp-for="LicensePlate" placeholder="12-ABC-3" autocomplete="off"
+                       id="plateInput" data-checking="@T("fnol.rdwChecking")" data-none="@T("fnol.rdwNone")" />
+                <span class="tiny muted" id="rdwInfo" aria-live="polite"></span>
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.vin")</span>
+                <input asp-for="Vin" autocomplete="off" />
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.lossDate")</span>
+                <input required type="date" asp-for="LossDate" />
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.location")</span>
+                <input required asp-for="LossLocation" placeholder="@T("fnol.locationHint")" autocomplete="off" />
+            </label>
+        </div>
+
+        <label class="field">
+            <span class="label">@T("fnol.description")</span>
+            <textarea required asp-for="Description" rows="4" placeholder="@T("fnol.descriptionHint")"></textarea>
+        </label>
+
+        <div class="grid g3" style="align-items:end">
+            <label class="check">
+                <input type="checkbox" asp-for="ThirdPartyInvolved" />
+                @T("fnol.thirdParty")
+            </label>
+            <label class="check">
+                <input type="checkbox" asp-for="Injuries" />
+                @T("fnol.injuries")
+            </label>
+            <label class="field">
+                <span class="label">@T("fnol.policeNumber")</span>
+                <input asp-for="PoliceReportNumber" autocomplete="off" />
+            </label>
+        </div>
+
+        <div class="row" style="justify-content:flex-end">
+            <a class="btn btn-ghost" href="/">@T("fnol.cancel")</a>
+            <button type="submit">@T("fnol.submit")</button>
+        </div>
+    </form>
+
+    <p class="tiny muted" style="margin-top:14px">@T("fnol.note")</p>
+</div>
+
+<script>
+    // Live RDW registry lookup on the kenteken field (best-effort; the form
+    // never depends on it). Debounced so we don't hammer the open-data API.
+    (function () {
+        const input = document.getElementById('plateInput');
+        const info = document.getElementById('rdwInfo');
+        let timer = null, seq = 0;
+        input.addEventListener('input', () => {
+            clearTimeout(timer);
+            const plate = input.value.replace(/[^0-9a-z]/gi, '');
+            if (plate.length < 4) { info.textContent = ''; return; }
+            timer = setTimeout(async () => {
+                const my = ++seq;
+                info.textContent = input.dataset.checking;
+                try {
+                    const res = await fetch('/api/rdw/' + encodeURIComponent(plate));
+                    if (my !== seq) return;
+                    if (!res.ok) { info.textContent = input.dataset.none; return; }
+                    const v = await res.json();
+                    info.textContent = '🚗 ' + [v.merk, v.model, v.bouwjaar, v.kleur, v.brandstof,
+                        v.apk_vervaldatum ? 'APK ' + v.apk_vervaldatum : null,
+                        v.wam_verzekerd === false ? '⚠ WAM: nee' : null]
+                        .filter(Boolean).join(' · ');
+                } catch { if (my === seq) info.textContent = ''; }
+            }, 450);
+        });
+    })();
+</script>

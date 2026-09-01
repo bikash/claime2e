@@ -1,0 +1,159 @@
+@model IndexModel
+@{
+    var p = Model.Period;
+    var openDelta = Model.OpenCases - Model.OpenCasesPrior;
+    var stages = new[] { "intake", "extraction", "review", "decision" };
+    var stageMax = Math.Max(1, Model.MyStages.Values.DefaultIfEmpty(0).Max());
+    var dayMax = Math.Max(Metrics.HandlerDailyTarget, Model.ClosedPerDay.Select(d => d.N).DefaultIfEmpty(0).Max());
+}
+
+<div class="grid g4" style="margin-bottom:16px">
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("open_cases", Model.OpenCases.ToString(),
+        Foot: T("dash.vsYesterday", openDelta > 0 ? "+" + openDelta : openDelta.ToString()),
+        Scope: "mine_open", Tone: "clay", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("due_today", Model.DueToday.ToString(),
+        Foot: T("dash.overdue", Model.Overdue),
+        Scope: "mine_due_today", Tone: Model.Overdue > 0 ? "warn" : "ink", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("stp_ready", Model.StpReady.ToString(),
+        Foot: T("dash.oneClick"), Scope: "mine_stp_ready", Tone: "ok", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("handling_time", "—", Period: p))" />
+</div>
+
+<div class="grid g2" style="margin-bottom:16px">
+    @* HD-1 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("hd.queue")</h2>
+            <span class="tiny muted">@T("hd.queueHint")</span>
+        </div>
+        @if (Model.MyStages.Values.Sum() == 0)
+        {
+            <p class="small muted">@T("dash.emptyQueue")</p>
+        }
+        else
+        {
+            <div class="stack">
+                @foreach (var s in stages)
+                {
+                    var n = Model.MyStages.GetValueOrDefault(s);
+                    <a class="hbar" href="/claims?scope=mine_stage_@s&from=@p.From.ToString("yyyy-MM-dd")&to=@p.To.ToString("yyyy-MM-dd")">
+                        <span class="hbar-label small">@T("stage." + s)</span>
+                        <span class="hbar-track"><span class="hbar-fill" style="width:@(n * 100 / stageMax)%"></span></span>
+                        <span class="mono small b">@n</span>
+                    </a>
+                }
+            </div>
+        }
+        @if (Model.MyAging.Count > 0)
+        {
+            <div class="aging-note">
+                <span class="badge stop"><span class="pip"></span>@T("hd.aging", Metrics.SlaWorkingDays)</span>
+                <ul class="plain" style="margin-top:8px">
+                    @foreach (var c in Model.MyAging)
+                    {
+                        <li class="spread" style="padding:5px 0">
+                            <a href="/claims/@c.Id" class="mono small">@c.ClaimNumber</a>
+                            <span class="tiny muted">@T("dash.workingDays", c.AgeWd)</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </section>
+
+    @* HD-2 — the platform has no task engine yet, so this card says so (CR-8) and
+       shows the one actionable list it can: claims one click from done. *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("hd.today")</h2>
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+        </div>
+        <p class="tiny muted" style="margin-bottom:12px">@T("miss.tasks")</p>
+        @if (Model.StpReadyClaims.Count == 0)
+        {
+            <p class="small muted">@T("hd.noStpReady")</p>
+        }
+        else
+        {
+            <div class="label" style="margin-bottom:6px">@T("hd.stpReadyList")</div>
+            <ul class="plain">
+                @foreach (var c in Model.StpReadyClaims)
+                {
+                    <li class="spread" style="padding:7px 0;border-bottom:1px solid var(--line)">
+                        <div>
+                            <a href="/claims/@c.Id" class="small"><strong>@c.ClaimNumber</strong></a>
+                            <div class="tiny muted">@c.PolicyholderName · @I18n.Money(c.EstimatedAmountEur)</div>
+                        </div>
+                        <form method="post" action="/claims/@c.Id/settle">
+                            <button type="submit" class="tiny">@T("rail.approve")</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+<div class="grid g2">
+    @* HD-3 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("hd.throughput")</h2>
+            <span class="tiny muted">@T("hd.target", Metrics.HandlerDailyTarget)</span>
+        </div>
+        @if (Model.ClosedPerDay.Count == 0)
+        {
+            <p class="small muted">@T("dash.emptyRange")</p>
+        }
+        else
+        {
+            <div class="colchart" role="img" aria-label="@T("hd.throughput")">
+                @foreach (var d in Model.ClosedPerDay)
+                {
+                    <div class="col" title="@d.Day.ToString("yyyy-MM-dd"): @d.N">
+                        <span class="col-fill" style="height:@(d.N * 100 / dayMax)%"></span>
+                        <span class="col-x tiny muted">@d.Day.ToString("dd/MM")</span>
+                    </div>
+                }
+                <span class="target-line" style="bottom:@(Metrics.HandlerDailyTarget * 100 / dayMax)%"></span>
+            </div>
+            <table class="visually-hidden">
+                <caption>@T("hd.throughput")</caption>
+                <tbody>
+                @foreach (var d in Model.ClosedPerDay)
+                {
+                    <tr><th scope="row">@d.Day.ToString("yyyy-MM-dd")</th><td>@d.N</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @* HD-4 *@
+    <section class="card">
+        <h2 style="margin-bottom:12px">@T("hd.activity")</h2>
+        @if (Model.MyActivity.Count == 0)
+        {
+            <p class="small muted">@T("hd.noActivity")</p>
+        }
+        else
+        {
+            <ul class="plain">
+                @foreach (var e in Model.MyActivity)
+                {
+                    <li style="padding:8px 0;border-bottom:1px solid var(--line)">
+                        <div class="small">
+                            <span class="badge">@e.KindLabel</span>
+                            @if (e.ClaimId is { Length: > 0 })
+                            {
+                                <a href="/claims/@e.ClaimId" class="mono">@e.ClaimNumber</a>
+                            }
+                        </div>
+                        <div class="tiny muted">@e.Body</div>
+                        <div class="tiny muted">@e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>

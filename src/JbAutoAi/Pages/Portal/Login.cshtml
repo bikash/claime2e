@@ -1,0 +1,45 @@
+@page "/portal/login"
+@model JbAutoAi.Pages.Portal.LoginModel
+@{
+    ViewData["Title"] = T("portal.title") + " · Boxora";
+    Layout = "_AuthLayout";
+}
+
+<h1>@T("portal.title")</h1>
+<p class="muted small" style="margin:6px 0 20px">@T("portal.intro")</p>
+
+@if (Model.Error is { } err)
+{
+    <div class="badge stop" style="margin-bottom:14px">@err</div>
+}
+
+<form method="post" class="stack">
+    <label class="field">
+        <span class="label">@T("login.email")</span>
+        <input type="email" asp-for="Email" required autocomplete="username" autofocus />
+    </label>
+    <label class="field">
+        <span class="label">@T("login.password")</span>
+        <input type="password" asp-for="Password" required autocomplete="current-password" />
+    </label>
+    <input type="hidden" asp-for="ReturnUrl" />
+    <button class="full" type="submit">@T("portal.signIn")</button>
+</form>
+
+@if (Model.DemoEmail is { Length: > 0 } demo)
+{
+    <div class="demo-box">
+        <div class="label" style="margin-bottom:6px">@T("portal.demoAccount")</div>
+        <div class="mono small">@demo</div>
+        <p class="tiny muted" style="margin:8px 0 0">
+            @T("login.demoPassword") <code class="mono">@Db.DemoPassword</code>
+        </p>
+    </div>
+}
+
+<p class="small" style="margin-top:18px">
+    @T("portal.noAccount") <a href="/portal/register">@T("portal.register")</a>
+</p>
+<p class="tiny muted">
+    @T("portal.toStaff") <a href="/login">@T("portal.toStaffLink")</a>
+</p>

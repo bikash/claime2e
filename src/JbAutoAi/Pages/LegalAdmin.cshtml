@@ -1,0 +1,173 @@
+@page "/legal/admin"
+@model LegalAdminModel
+@{
+    ViewData["Title"] = T("legalAdmin.title") + " · Boxora";
+    var e = Model.Editing;
+    var editing = !string.IsNullOrEmpty(e.Id) && Model.Docs.Any(d => d.Id == e.Id);
+    var docClasses = new[] { "statute", "market_agreement", "protocol", "case_law", "kifid", "policy_wording" };
+    var passageKinds = new[] { "summary", "verbatim", "licensed_summary" };
+    var reviewStatuses = new[] { "draft", "curated" };
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <h1>@T("legalAdmin.title")</h1>
+        <div class="tiny muted">@T("legalAdmin.corpus", Model.Corpus)</div>
+    </div>
+    <form method="post" asp-page-handler="Embed" class="row">
+        <button class="btn-ghost" type="submit">@T("legalAdmin.embedNow")</button>
+    </form>
+</div>
+
+@if (Model.Notice is { Length: > 0 })
+{
+    <div class="card" style="border-color:var(--ok);background:var(--ok-bg);margin-bottom:16px">
+        <div class="small">@T("legalAdmin.notice." + Model.Notice.Split(':')[0], Model.Notice.Contains(':') ? Model.Notice.Split(':', 2)[1] : "")</div>
+    </div>
+}
+
+<div class="grid g2" style="align-items:flex-start">
+    <section class="card">
+        <h2>@(editing ? T("legalAdmin.editDoc") : T("legalAdmin.newDoc"))</h2>
+        <form method="post" asp-page-handler="Save" class="stack">
+            <input type="hidden" asp-for="Form.CorpusVersion" value="@(e.CorpusVersion?.Length > 0 ? e.CorpusVersion : Model.Corpus)" />
+
+            <label class="field">
+                <span class="label">@T("legalAdmin.id")</span>
+                <input asp-for="Form.Id" value="@e.Id" required
+                       placeholder="bw-6-162" readonly="@editing" />
+                <span class="tiny muted">@T("legalAdmin.idHint")</span>
+            </label>
+
+            <div class="grid g2">
+                <label class="field">
+                    <span class="label">@T("legalAdmin.citation")</span>
+                    <input asp-for="Form.Citation" value="@e.Citation" required placeholder="BW 6:162" />
+                </label>
+                <label class="field">
+                    <span class="label">@T("legalAdmin.docClass")</span>
+                    <select asp-for="Form.DocClass">
+                        @foreach (var dc in docClasses)
+                        {
+                            <option value="@dc" selected="@(e.DocClass == dc)">@dc</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            <label class="field">
+                <span class="label">@T("legalAdmin.title2")</span>
+                <input asp-for="Form.Title" value="@e.Title" required />
+            </label>
+
+            <label class="field">
+                <span class="label">@T("legalAdmin.source")</span>
+                <input asp-for="Form.Source" value="@e.Source" required placeholder="Burgerlijk Wetboek Boek 6" />
+            </label>
+
+            <div class="grid g2">
+                <label class="field">
+                    <span class="label">@T("legalAdmin.validFrom")</span>
+                    <input type="date" asp-for="Form.ValidFrom"
+                           value="@(e.ValidFrom.ToString("yyyy-MM-dd"))" required />
+                </label>
+                <label class="field">
+                    <span class="label">@T("legalAdmin.validTo")</span>
+                    <input type="date" asp-for="Form.ValidTo"
+                           value="@(e.ValidTo?.ToString("yyyy-MM-dd"))" />
+                </label>
+            </div>
+
+            <label class="field">
+                <span class="label">@T("legalAdmin.url")</span>
+                <input asp-for="Form.Url" value="@e.Url" placeholder="https://wetten.overheid.nl/…" />
+            </label>
+
+            <div class="grid g2">
+                <label class="field">
+                    <span class="label">@T("legalAdmin.passageKind")</span>
+                    <select asp-for="Form.PassageKind">
+                        @foreach (var k in passageKinds)
+                        {
+                            <option value="@k" selected="@(e.PassageKind == k)">@k</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span class="label">@T("legalAdmin.reviewStatus")</span>
+                    <select asp-for="Form.ReviewStatus">
+                        @foreach (var r in reviewStatuses)
+                        {
+                            <option value="@r" selected="@(e.ReviewStatus == r)">@r</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            <label class="field">
+                <span class="label">@T("legalAdmin.passage")</span>
+                <textarea asp-for="Form.Passage" rows="8" required>@e.Passage</textarea>
+                <span class="tiny muted">@T("legalAdmin.passageHint")</span>
+            </label>
+
+            <div class="row" style="justify-content:flex-end">
+                @if (editing)
+                {
+                    <a class="btn btn-ghost" href="/legal/admin">@T("legalAdmin.cancel")</a>
+                }
+                <button type="submit">@(editing ? T("legalAdmin.update") : T("legalAdmin.create"))</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("legalAdmin.existing", Model.Docs.Count)</h2>
+        </div>
+        @if (Model.Docs.Count == 0)
+        {
+            <p class="small muted">@T("legalAdmin.none")</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>@T("legalAdmin.citation")</th>
+                        <th>@T("legalAdmin.docClass")</th>
+                        <th>@T("legalAdmin.reviewStatus")</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var d in Model.Docs)
+                {
+                    <tr>
+                        <td>
+                            <strong>@d.Citation</strong>
+                            <div class="tiny muted">@d.Title</div>
+                        </td>
+                        <td class="tiny muted">@d.DocClass</td>
+                        <td>
+                            <span class="badge @(d.ReviewStatus == "curated" ? "ok" : "")">@d.ReviewStatus</span>
+                            @if (!d.Embedded)
+                            {
+                                <span class="badge warn tiny" title="@T("legalAdmin.needsEmbed")">·</span>
+                            }
+                        </td>
+                        <td class="row" style="gap:6px;justify-content:flex-end">
+                            <a class="btn btn-ghost small" href="/legal/admin?edit=@d.Id">@T("legalAdmin.edit")</a>
+                            <form method="post" asp-page-handler="Delete" style="display:inline"
+                                  onsubmit="return confirm('@T("legalAdmin.confirmDelete")');">
+                                <input type="hidden" name="id" value="@d.Id" />
+                                <button class="btn-ghost small" type="submit"
+                                        style="color:var(--stop);border-color:#EFCFC2">@T("legalAdmin.delete")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+</div>

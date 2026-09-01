@@ -1,0 +1,42 @@
+@page "/portal/register"
+@model JbAutoAi.Pages.Portal.RegisterModel
+@{
+    ViewData["Title"] = T("portal.register") + " · Boxora";
+    Layout = "_AuthLayout";
+}
+
+<h1>@T("portal.register")</h1>
+<p class="muted small" style="margin:6px 0 20px">@T("portal.registerIntro")</p>
+
+@if (Model.Error is { } err)
+{
+    <div class="badge stop" style="margin-bottom:14px">@err</div>
+}
+
+<form method="post" class="stack">
+    <label class="field">
+        <span class="label">@T("portal.name")</span>
+        <input asp-for="Name" required autocomplete="name" autofocus />
+    </label>
+    <label class="field">
+        <span class="label">@T("login.email")</span>
+        <input type="email" asp-for="Email" required autocomplete="email" />
+    </label>
+    <label class="field">
+        <span class="label">@T("portal.phone")</span>
+        <input asp-for="Phone" autocomplete="tel" />
+    </label>
+    <label class="field">
+        <span class="label">@T("login.password")</span>
+        <input type="password" asp-for="Password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <label class="field">
+        <span class="label">@T("portal.passwordAgain")</span>
+        <input type="password" asp-for="PasswordRepeat" required minlength="8" autocomplete="new-password" />
+    </label>
+    <button class="full" type="submit">@T("portal.register")</button>
+</form>
+
+<p class="small" style="margin-top:18px">
+    @T("portal.haveAccount") <a href="/portal/login">@T("portal.signIn")</a>
+</p>

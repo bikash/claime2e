@@ -1,0 +1,216 @@
+@page "/analytics"
+@model AnalyticsModel
+@{
+    ViewData["Title"] = T("bi.title") + " · Boxora";
+    var maxLoad = Model.Workload.Count == 0 ? 1 : Math.Max(1, Model.Workload.Max(w => w.Open + w.Decided));
+    var maxAmt = Model.LargestOpen.Count == 0 ? 1 : Math.Max(1, Model.LargestOpen.Max(c => c.EstimatedAmountEur ?? 0));
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string Pc(double v) => (Math.Clamp(v, 0, 1) * 100).ToString("F1", inv);
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <h1>@T("bi.title")</h1>
+        <div class="tiny muted">@T("bi.subtitle")</div>
+    </div>
+</div>
+
+<section class="card tabs" id="biTabs">
+    <input type="radio" name="biTabs" id="tab-workload" checked />
+    <input type="radio" name="biTabs" id="tab-stp" />
+    <input type="radio" name="biTabs" id="tab-cost" />
+    <div class="tab-bar">
+        <label for="tab-workload">@T("bi.tab.workload")</label>
+        <label for="tab-stp">@T("bi.tab.stp")</label>
+        <label for="tab-cost">@T("bi.tab.cost")</label>
+    </div>
+
+    <div class="tab-panel" data-for="tab-workload">
+        <div class="grid g3" style="margin-bottom:16px">
+            <div class="kpi" data-tone="clay">
+                <div class="label">@T("bi.kpi.backlog")</div>
+                <div class="n">@Model.Manager.Backlog</div>
+                <div class="foot">@T("bi.kpi.oldestOpen"): @Model.Handler.OldestOpenDays d</div>
+            </div>
+            <div class="kpi" data-tone="warn">
+                <div class="label">@T("bi.kpi.awaitingAnalysis")</div>
+                <div class="n">@Model.Handler.Awaiting</div>
+                <div class="foot">@T("bi.kpi.decidedToday"): @Model.Handler.DecidedToday</div>
+            </div>
+            <div class="kpi" data-tone="ok">
+                <div class="label">@T("bi.kpi.throughput")</div>
+                <div class="n">@Model.Manager.Throughput30</div>
+                <div class="foot">@T("bi.kpi.handlers"): @Model.Manager.ActiveHandlers</div>
+            </div>
+            <div class="kpi" data-tone="ink">
+                <div class="label">@T("bi.kpi.avgAge")</div>
+                <div class="n">@Model.Handler.AvgAgeDays.ToString("F1")</div>
+                <div class="foot">@T("bi.kpi.avgTouches"): @Model.Handler.AvgTouches.ToString("F1")</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:8px">
+            <h2>@T("bi.card.byHandler")</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>@T("bi.col.handler")</th>
+                    <th class="num">@T("bi.col.open")</th>
+                    <th class="num">@T("bi.col.decided")</th>
+                    <th style="width:40%">&nbsp;</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var h in Model.Workload)
+                {
+                    <tr>
+                        <td>
+                            <strong>@h.Name</strong>
+                            <div class="tiny muted">@h.Role.Replace('_', ' ')</div>
+                        </td>
+                        <td class="num">@h.Open</td>
+                        <td class="num">@h.Decided</td>
+                        <td>
+                            <div class="stackbar" aria-hidden="true">
+                                <span class="seg stop" style="width:@(Pc(h.Open / (double)maxLoad))%" title="open"></span>
+                                <span class="seg ok" style="width:@(Pc(h.Decided / (double)maxLoad))%" title="decided"></span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tab-panel" data-for="tab-stp">
+        <div class="grid g3" style="margin-bottom:16px">
+            <div class="kpi" data-tone="ok">
+                <div class="label">@T("bi.kpi.stpMonth")</div>
+                <div class="n">@Model.Manager.StpMonth.ToString("P1")</div>
+                <div class="foot">@T("kpi.stpFoot", Model.Stp.Stp, Model.Stp.Decided)</div>
+            </div>
+            <div class="kpi" data-tone="clay">
+                <div class="label">@T("bi.kpi.autoSavings")</div>
+                <div class="n">@Model.Cfo.AutoApproved</div>
+                <div class="foot">@T("bi.kpi.autoSavingsFoot")</div>
+            </div>
+            <div class="kpi" data-tone="ink">
+                <div class="label">@T("kpi.integrity")</div>
+                <div class="n">@Model.Citations.Integrity.ToString("P1")</div>
+                <div class="foot">@T("kpi.integrityFoot", Model.Citations.Unresolved, Model.Citations.TotalCitations)</div>
+            </div>
+            <div class="kpi" data-tone="warn">
+                <div class="label">@T("bi.kpi.fraudRate")</div>
+                <div class="n">@Model.Manager.FraudFlags</div>
+                <div class="foot">≥ 0.30</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:8px">
+            <h2>@T("bi.card.byMonth")</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>@T("col.month")</th>
+                    <th class="num">@T("col.total")</th>
+                    <th class="num">@T("col.stp")</th>
+                    <th class="num">@T("col.assisted")</th>
+                    <th class="num">@T("col.manual")</th>
+                    <th style="width:30%">@T("bi.card.decisionMix")</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var m in Model.ClaimsByMonth)
+                {
+                    var tot = Math.Max(1, m.Total);
+                    <tr>
+                        <td>@m.Month</td>
+                        <td class="num">@m.Total</td>
+                        <td class="num">@m.Stp</td>
+                        <td class="num">@m.Assisted</td>
+                        <td class="num">@m.Manual</td>
+                        <td>
+                            <div class="stackbar" aria-hidden="true">
+                                <span class="seg ok" style="width:@(Pc(m.Stp / (double)tot))%" title="STP"></span>
+                                <span class="seg medium" style="width:@(Pc(m.Assisted / (double)tot))%" title="assisted"></span>
+                                <span class="seg stop" style="width:@(Pc(m.Manual / (double)tot))%" title="manual"></span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tab-panel" data-for="tab-cost">
+        <div class="grid g3" style="margin-bottom:16px">
+            <div class="kpi" data-tone="clay">
+                <div class="label">@T("bi.kpi.totalExposure")</div>
+                <div class="n">@I18n.Money(Model.Cfo.TotalExposureEur)</div>
+                <div class="foot">@Model.Cfo.Total @T("kpi.claims")</div>
+            </div>
+            <div class="kpi" data-tone="warn">
+                <div class="label">@T("bi.kpi.monthExposure")</div>
+                <div class="n">@I18n.Money(Model.Cfo.MonthExposureEur)</div>
+                <div class="foot">@T("bi.kpi.avgCost"): @I18n.Money(Model.Cfo.AvgCostEur)</div>
+            </div>
+            <div class="kpi" data-tone="ink">
+                <div class="label">@T("bi.kpi.llmSpend")</div>
+                <div class="n">$@Model.Cfo.LlmSpend30.ToString("F2")</div>
+                <div class="foot">30d</div>
+            </div>
+        </div>
+
+        <div class="grid g2" style="margin-top:8px">
+            <div class="card">
+                <h2>@T("bi.card.topAmounts")</h2>
+                @if (Model.LargestOpen.Count == 0)
+                {
+                    <p class="small muted">—</p>
+                }
+                else
+                {
+                    <table>
+                        <thead><tr><th>@T("col.claim")</th><th class="num">@T("col.amount")</th></tr></thead>
+                        <tbody>
+                        @foreach (var lc in Model.LargestOpen)
+                        {
+                            <tr>
+                                <td>
+                                    <a href="/claims/@lc.Id"><strong>@lc.ClaimNumber</strong></a>
+                                    <div class="tiny muted">@lc.PolicyholderName</div>
+                                </td>
+                                <td class="num">
+                                    @I18n.Money(lc.EstimatedAmountEur)
+                                    <div class="minibar"><span class="stop" style="width:@(Pc((lc.EstimatedAmountEur ?? 0) / maxAmt))%"></span></div>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+            <div class="card">
+                <h2>@T("bi.card.spendByMonth")</h2>
+                @if (Model.CostByMonth.Count == 0)
+                {
+                    <p class="small muted">—</p>
+                }
+                else
+                {
+                    <table>
+                        <thead><tr><th>@T("col.month")</th><th class="num">@T("col.calls")</th><th class="num">@T("col.usd")</th></tr></thead>
+                        <tbody>
+                        @foreach (var m in Model.CostByMonth)
+                        {
+                            <tr><td>@m.Month</td><td class="num">@m.Calls</td><td class="num">$@m.CostUsd.ToString("F2")</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</section>

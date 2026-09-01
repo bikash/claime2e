@@ -1,0 +1,145 @@
+@page "/workflows/{id}/builder"
+@model WorkflowBuilderModel
+@{
+    var w = Model.Workflow;
+    ViewData["Title"] = w.Name + " · " + T("wfb.title");
+    Layout = null;
+
+    // Module catalogue. `exec` marks the ones WorkflowRunner can actually execute —
+    // the rest are design-time and get recorded as notes, which the inspector says.
+    var types = new Dictionary<string, object>
+    {
+        ["trigger_fnol"]   = new { cat = "trigger",  g = "FN",   label = T("wfb.m.fnol"),        sub = T("wfb.s.channels"), exec = false, mcp = false },
+        ["classify"]       = new { cat = "ingest",   g = "CL",   label = T("wfb.m.classify"),    sub = T("wfb.s.doctype"),  exec = true,  mcp = false },
+        ["extract"]        = new { cat = "ingest",   g = "EX",   label = T("wfb.m.extract"),     sub = T("wfb.s.ocr"),      exec = true,  mcp = false },
+        ["conn_rdw"]       = new { cat = "enrich",   g = "RDW",  label = "RDW",                  sub = T("wfb.s.plate"),    exec = false, mcp = false },
+        ["conn_roydata"]   = new { cat = "enrich",   g = "ROY",  label = "Roydata",              sub = T("wfb.s.tpl"),      exec = false, mcp = false },
+        ["conn_cis"]       = new { cat = "enrich",   g = "CIS",  label = "Stichting CIS",        sub = T("wfb.s.evr"),      exec = false, mcp = false },
+        ["ai_summary"]     = new { cat = "ai",       g = "SUM",  label = T("wfb.m.summary"),     sub = T("wfb.s.cited"),    exec = false, mcp = false },
+        ["ai_liability"]   = new { cat = "ai",       g = "LIA",  label = T("wfb.m.liability"),   sub = T("wfb.s.rag"),      exec = false, mcp = false },
+        ["ai_severity"]    = new { cat = "ai",       g = "SEV",  label = T("wfb.m.severity"),    sub = T("wfb.s.vision"),   exec = false, mcp = false },
+        ["ai_fraud"]       = new { cat = "ai",       g = "FRD",  label = T("wfb.m.fraud"),       sub = T("wfb.s.signals"),  exec = false, mcp = false },
+        ["agent"]          = new { cat = "ai",       g = "AGT",  label = T("wfb.m.agent"),       sub = T("wfb.s.agent"),    exec = true,  mcp = false },
+        ["coverage"]       = new { cat = "decision", g = "COV",  label = T("wfb.m.coverage"),    sub = T("wfb.s.policy"),   exec = true,  mcp = false },
+        ["decision"]       = new { cat = "decision", g = "DEC",  label = T("wfb.m.decision"),    sub = T("wfb.s.stp"),      exec = true,  mcp = false },
+        ["human_review"]   = new { cat = "human",    g = "HUM",  label = T("wfb.m.human"),       sub = T("wfb.s.mandatory"),exec = false, mcp = false },
+        ["correspondence"] = new { cat = "action",   g = "MAIL", label = T("wfb.m.corr"),        sub = T("wfb.s.email"),    exec = true,  mcp = false },
+        ["writeback"]      = new { cat = "action",   g = "WB",   label = T("wfb.m.writeback"),   sub = "Keylane",           exec = false, mcp = false },
+        ["assign"]         = new { cat = "action",   g = "ASN",  label = T("wfb.m.assign"),      sub = T("wfb.s.handler"),  exec = false, mcp = false },
+        ["mcp"]            = new { cat = "mcp",      g = "MCP",  label = T("wfb.m.mcp"),         sub = T("wfb.s.server"),   exec = true,  mcp = true  },
+        ["crm_hubspot"]    = new { cat = "mcp",      g = "HS",   label = "HubSpot CRM",          sub = T("wfb.s.crm"),      exec = true,  mcp = false },
+        ["webhook"]        = new { cat = "mcp",      g = "WH",   label = "Webhook",              sub = T("wfb.s.external"), exec = true,  mcp = false },
+    };
+
+    var fields = new Dictionary<string, object[]>
+    {
+        ["classify"]       = [new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["extract"]        = [new { k = "conf",   t = "number", l = T("wfb.f.conf"),    v = "0.85" },
+                              new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["agent"]          = [new { k = "agentId", t = "select", l = T("wfb.f.agent"),  o = Model.AgentChoices },
+                              new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["ai_summary"]     = [new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["ai_severity"]    = [new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["conn_rdw"]       = [new { k = "ep",     t = "text",   l = "Endpoint",         v = "opendata.rdw.nl" }],
+        ["conn_cis"]       = [new { k = "ep",     t = "text",   l = "Endpoint",         v = "api.stichtingcis.nl" }],
+        ["conn_roydata"]   = [new { k = "ep",     t = "text",   l = "Endpoint",         v = "roydata.nl/api" }],
+        ["ai_liability"]   = [new { k = "corpus", t = "select", l = T("wfb.f.corpus"),  o = new[] { "v2026.2", "v2026.1" } },
+                              new { k = "cite",   t = "toggle", l = T("wfb.f.cite"),    v = "1" },
+                              new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["ai_fraud"]       = [new { k = "thr",    t = "number", l = T("wfb.f.siu"),     v = "40" },
+                              new { k = "prompt", t = "textarea", l = T("wfb.f.prompt") }],
+        ["decision"]       = [new { k = "amt",    t = "number", l = T("wfb.f.cap"),     v = "5000" },
+                              new { k = "fr",     t = "number", l = T("wfb.f.maxFraud"),v = "20" }],
+        ["human_review"]   = [new { k = "cond",   t = "select", l = T("wfb.f.cond"),
+                                    o = new[] { T("wfb.o.injuryDispute"), T("wfb.o.injuryOnly"), T("wfb.o.manual") } }],
+        ["correspondence"] = [new { k = "chan",   t = "select", l = T("corr.channel"),
+                                    o = new[] { T("corr.ch.email"), T("corr.ch.portal"), "HubSpot CRM" } },
+                              new { k = "appr",   t = "toggle", l = T("wfb.f.approve"), v = "1" }],
+        ["writeback"]      = [new { k = "sys",    t = "select", l = T("wfb.f.target"),  o = new[] { "Keylane", "Guidewire", "CCS" } }],
+        ["assign"]         = [new { k = "mode",   t = "select", l = T("wfb.f.mode"),
+                                    o = new[] { T("wfb.o.byCapacity"), T("wfb.o.fixed"), T("wfb.o.department") } }],
+        ["mcp"]            = [new { k = "srv",    t = "select", l = T("wfb.f.server"),
+                                    o = new[] { "mcp.reduzer.com", "mcp.linear.app", "mcp.hubspot.com" } },
+                              new { k = "tool",   t = "text",   l = "Tool", v = "search_products" },
+                              new { k = "auth",   t = "select", l = "Auth", o = new[] { "API key", "OAuth 2.1" } }],
+        ["crm_hubspot"]    = [new { k = "obj",    t = "select", l = "Object", o = new[] { "Ticket", "Contact", "Deal" } }],
+        ["webhook"]        = [new { k = "url",    t = "text",   l = "URL", v = "https://" },
+                              new { k = "method", t = "select", l = T("wfb.f.method"), o = new[] { "POST", "PUT", "GET" } }],
+    };
+
+    var cats = new Dictionary<string, string>
+    {
+        ["trigger"] = "#0E7B6E", ["ingest"] = "#2277C9", ["enrich"] = "#3E566F", ["ai"] = "#6B45D6",
+        ["decision"] = "#2A4FE0", ["human"] = "#A65B0B", ["action"] = "#0E7B57", ["mcp"] = "#7C3AED",
+    };
+    var catLbl = new Dictionary<string, string>
+    {
+        ["trigger"] = T("wfb.c.trigger"), ["ingest"] = T("wfb.c.ingest"), ["enrich"] = T("wfb.c.enrich"),
+        ["ai"] = T("wfb.c.ai"), ["decision"] = T("wfb.c.decision"), ["human"] = T("wfb.c.human"),
+        ["action"] = T("wfb.c.action"), ["mcp"] = T("wfb.c.mcp"),
+    };
+}
+<!DOCTYPE html>
+<html lang="@I18n.Current">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/app.css" />
+</head>
+<body class="wfb">
+<form method="post" id="wfForm"
+      data-graph="@Model.Graph"
+      data-types="@JbAutoAi.Json.Str(types)"
+      data-fields="@JbAutoAi.Json.Str(fields)"
+      data-cat="@JbAutoAi.Json.Str(cats)"
+      data-catlbl="@JbAutoAi.Json.Str(catLbl)">
+    <input type="hidden" name="GraphJson" id="graphJson" />
+
+    <div class="wfb-app">
+        <header class="topbar">
+            <a class="brand" href="/workflows">
+                <span class="mk"><svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16232e"/><path fill="#fff" fill-rule="evenodd" d="M13 10H24V18H21V25H35Q41 25 41 21.5Q41 18 35 18H33V10H39Q49 10 49 20V24Q49 33 40 33Q51 33 51 43V46Q51 56 41 56H13ZM21 41H36Q43 41 43 44.5Q43 48 36 48H21Z"/><rect x="25.5" y="3" width="6" height="22" rx="1" fill="#d95d0f"/></svg></span>
+                <span>Boxora</span>
+                <span class="tag">WORKFLOW</span>
+            </a>
+            <div class="wf-name">@T("wfb.pipeline") <b>@w.Name</b></div>
+            <span class="spacer"></span>
+            @if (Model.Notice == "saved")
+            {
+                <span class="role-pill">@T("wfb.saved")</span>
+            }
+            else if (Model.Notice == "bad")
+            {
+                <span class="role-pill ro">@T("wfb.badGraph")</span>
+            }
+            <button type="button" class="tbtn" id="wfValidate">@T("wfb.validate")</button>
+            <button type="button" class="tbtn blue" id="wfSimulate">▶ @T("wfb.simulate")</button>
+            <button type="submit" class="tbtn solid">@T("wfb.save")</button>
+        </header>
+
+        <div class="wfb-main">
+            <aside class="palette">
+                <div class="pal-h">@T("wfb.modules")</div>
+                <div class="pal-sub">@T("wfb.modulesHint")</div>
+                <div id="palList"></div>
+            </aside>
+
+            <div class="wfb-canvas" id="canvas">
+                <div class="canvas-inner" id="inner">
+                    <svg class="wires" id="wires"></svg>
+                </div>
+            </div>
+
+            <aside class="inspector" id="inspector"></aside>
+        </div>
+    </div>
+</form>
+
+<div class="toast" id="toast"><span class="tk">✓</span><span id="toastMsg"></span></div>
+<script src="~/workflow-builder.js" defer></script>
+</body>
+</html>

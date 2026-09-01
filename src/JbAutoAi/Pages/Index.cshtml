@@ -1,0 +1,54 @@
+@page "/"
+@model IndexModel
+@{
+    ViewData["Title"] = T("idx.title") + " · Boxora";
+}
+
+@if (Model.IsSuperAdmin)
+{
+    <partial name="_DashPlatform" model="Model" />
+}
+else
+{
+    var title = T("dash.view." + Model.View);
+    <div class="between" style="margin-bottom:6px">
+        <div>
+            <div class="label">@T("dash.role." + Model.Role)</div>
+            <h1>@title</h1>
+        </div>
+        @if (Model.View != "cfo")
+        {
+            <a href="/fnol">@T("idx.register")</a>
+        }
+    </div>
+
+    @* CR-2 range, CR-3 freshness, CR-7 export — one bar, every dashboard *@
+    <form method="get" class="dashbar">
+        <label class="tiny muted" for="from">@T("dash.range")</label>
+        <input type="date" id="from" name="from" value="@Model.Period.From.ToString("yyyy-MM-dd")" />
+        <span class="tiny muted">→</span>
+        <input type="date" name="to" value="@Model.Period.To.ToString("yyyy-MM-dd")" />
+        <button type="submit">@T("dash.apply")</button>
+        <span style="flex:1"></span>
+        <span class="tiny muted" title="@T("dash.freshnessHint")">
+            @T("dash.updated", Model.LoadedAt.ToLocalTime().ToString("HH:mm"))
+        </span>
+        <a class="btn btn-ghost tiny"
+           href="/export/dashboard.csv?view=@Model.View&from=@Model.Period.From.ToString("yyyy-MM-dd")&to=@Model.Period.To.ToString("yyyy-MM-dd")">
+            @T("dash.exportCsv")
+        </a>
+    </form>
+
+    switch (Model.View)
+    {
+        case "manager":
+            <partial name="_DashManager" model="Model" />
+            break;
+        case "cfo":
+            <partial name="_DashCfo" model="Model" />
+            break;
+        default:
+            <partial name="_DashHandler" model="Model" />
+            break;
+    }
+}

@@ -1,0 +1,174 @@
+@page "/legal"
+@model LegalModel
+@{
+    ViewData["Title"] = T("legal.title") + " · Boxora";
+
+    string KindLabel(string kind) => kind switch
+    {
+        "verbatim" => T("legal.kind.verbatim"),
+        "summary" => T("legal.kind.summary"),
+        "licensed_summary" => T("legal.kind.licensed"),
+        _ => kind,
+    };
+}
+
+<div class="between" style="margin-bottom:6px">
+    <h1>@T("legal.title")</h1>
+    <span class="badge clay">@(Model.CorpusVersion ?? T("legal.noCorpus"))</span>
+</div>
+<p class="muted small" style="margin:0 0 20px">
+    @T("legal.intro")
+    @T("legal.indexed", Model.Embedded, Model.Chunks)
+    @if (Model.Embedded == 0)
+    {
+        @T("legal.lexicalOnly")
+    }
+</p>
+
+<form method="get" class="card" style="margin-bottom:16px">
+    <div class="grid g4" style="align-items:end">
+        <label class="field span2">
+            <span class="label">@T("legal.query")</span>
+            <input type="search" name="q" value="@Model.Query" placeholder="@T("legal.queryHint")" />
+        </label>
+        <label class="field">
+            <span class="label">@T("legal.asOf")</span>
+            <input type="date" name="asOf" value="@Model.AsOf?.ToString("yyyy-MM-dd")" />
+        </label>
+        <label class="field">
+            <span class="label">@T("legal.source")</span>
+            <select name="class">
+                @foreach (var value in LegalModel.Classes)
+                {
+                    <option value="@value" selected="@(Model.DocClass == value)">
+                        @T(value.Length == 0 ? "source.all" : "source." + value)
+                    </option>
+                }
+            </select>
+        </label>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+        <button type="submit">@T("legal.search")</button>
+    </div>
+</form>
+
+@if (Model.Focused is { } f)
+{
+    <section class="card" id="@f.ChunkId" style="border-color:var(--clay);margin-bottom:16px">
+        <div class="spread" style="margin-bottom:6px">
+            <h2>
+                @if (f.Url is { Length: > 0 })
+                {
+                    <a href="@f.Url" target="_blank" rel="noopener">@f.Citation ↗</a>
+                }
+                else
+                {
+                    @f.Citation
+                }
+            </h2>
+            <span class="row">
+                <span class="badge clay">@T("legal.deepLink")</span>
+                <span class="badge @(f.ReviewStatus == "draft" ? "warn" : "ok")">@f.ReviewStatus</span>
+            </span>
+        </div>
+        <div class="small"><strong>@f.Title</strong> · @f.Source</div>
+        <p style="margin:12px 0 0">@f.Passage</p>
+        <div class="tiny muted" style="margin-top:10px">
+            @KindLabel(f.PassageKind) · @T("legal.validFromTo", f.ValidFrom.ToString("yyyy-MM-dd")) ·
+            <span class="mono">@f.ChunkId</span>
+        </div>
+    </section>
+}
+else if (Model.Cite is { Length: > 0 })
+{
+    <section class="card" style="border-color:#EFCFC2;background:var(--stop-bg);margin-bottom:16px">
+        <h2>@T("legal.citeMissing")</h2>
+        <p class="small mono" style="margin:6px 0 0">@Model.Cite</p>
+    </section>
+}
+
+@if (Model.Searched)
+{
+    <div class="between" style="margin-bottom:12px">
+        <h2>@T("legal.results", Model.Results.Count)</h2>
+        <span class="tiny muted">@T("legal.validFromTo", Model.AsOf?.ToString("yyyy-MM-dd"))</span>
+    </div>
+
+    @if (Model.Results.Count == 0)
+    {
+        <div class="card"><p class="empty">@T("legal.noResults")</p></div>
+    }
+
+    <ul class="plain">
+        @foreach (var h in Model.Results)
+        {
+            <li class="card" id="@h.ChunkId">
+                <div class="spread" style="margin-bottom:6px">
+                    <h2>
+                        @if (h.Url is { Length: > 0 })
+                        {
+                            <a href="@h.Url" target="_blank" rel="noopener">@h.Citation ↗</a>
+                        }
+                        else
+                        {
+                            @h.Citation
+                        }
+                    </h2>
+                    <span class="row">
+                        <span class="badge">@h.RetrievalMode</span>
+                        <span class="badge">@h.Score.ToString("F4")</span>
+                        <span class="badge @(h.ReviewStatus == "draft" ? "warn" : "ok")">@h.ReviewStatus</span>
+                    </span>
+                </div>
+                <div class="small"><strong>@h.Title</strong> · @h.Source</div>
+                <p class="small" style="margin:10px 0 0">@h.Passage</p>
+                <div class="tiny muted" style="margin-top:10px">
+                    @KindLabel(h.PassageKind) · @T("legal.validFromTo", h.ValidFrom.ToString("yyyy-MM-dd"))@(h.ValidTo is { } vt ? " " + T("legal.until", vt.ToString("yyyy-MM-dd")) : "") ·
+                    <span class="mono">@h.ChunkId</span>
+                </div>
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <div class="card">
+        <h2>@T("legal.full")</h2>
+        <p class="sub">@T("legal.fullSub", Model.Corpus.Count)</p>
+        <table>
+            <thead>
+            <tr>
+                <th>@T("legal.col.citation")</th><th>@T("legal.col.title")</th>
+                <th>@T("legal.source")</th><th>@T("legal.col.kind")</th>
+                <th>@T("legal.col.validFrom")</th><th>@T("legal.col.status")</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var h in Model.Corpus)
+            {
+                <tr id="@h.ChunkId">
+                    <td>
+                        <strong>@h.Citation</strong>
+                        <div class="tiny muted mono">@h.ChunkId</div>
+                    </td>
+                    <td>
+                        <details>
+                            <summary>@h.Title</summary>
+                            <div class="passage small" style="margin-top:8px">
+                                @h.Passage
+                                <div class="meta">@KindLabel(h.PassageKind)</div>
+                            </div>
+                        </details>
+                    </td>
+                    <td class="small muted">@h.Source</td>
+                    <td class="small muted">@T("source." + h.DocClass)</td>
+                    <td class="small muted">@h.ValidFrom.ToString("yyyy-MM-dd")</td>
+                    <td><span class="badge @(h.ReviewStatus == "draft" ? "warn" : "ok")">@h.ReviewStatus</span></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+<p class="tiny muted" style="margin-top:18px">@T("legal.disclaimer")</p>

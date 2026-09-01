@@ -1,0 +1,78 @@
+@page "/audit"
+@model AuditModel
+@{
+    ViewData["Title"] = T("audit.title") + " · Boxora";
+}
+
+<div class="between" style="margin-bottom:20px">
+    <h1>@T("audit.title")</h1>
+    <span class="tiny muted">@T("audit.hint")</span>
+</div>
+
+<form method="get" class="searchbar" role="search">
+    <label class="field" style="flex:1;max-width:340px">
+        <span class="label">@T("audit.filterKind")</span>
+        <select name="kind" onchange="this.form.submit()">
+            <option value="">@T("audit.allKinds")</option>
+            @foreach (var k in Model.Kinds)
+            {
+                <option value="@k" selected="@(Model.Kind == k)">@k.Replace('_',' ')</option>
+            }
+        </select>
+    </label>
+    @if (Model.Kind is not null)
+    {
+        <a class="btn btn-ghost" href="/audit">@T("idx.clear")</a>
+    }
+</form>
+
+<div class="card">
+    <table>
+        <thead>
+        <tr>
+            <th>@T("audit.when")</th>
+            <th>@T("audit.claim")</th>
+            <th>@T("audit.actor")</th>
+            <th>@T("audit.kind")</th>
+            <th>@T("audit.body")</th>
+        </tr>
+        </thead>
+        <tbody>
+        @if (Model.Entries.Count == 0)
+        {
+            <tr><td colspan="5" class="empty">@T("audit.empty")</td></tr>
+        }
+        @foreach (var e in Model.Entries)
+        {
+            <tr>
+                <td class="mono tiny" style="white-space:nowrap">@e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                <td>
+                    @if (e.ClaimId is { Length: > 0 })
+                    {
+                        <a href="/claims/@e.ClaimId">
+                            <strong>@(e.ClaimNumber ?? e.ClaimId)</strong>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="tiny muted">—</span>
+                    }
+                </td>
+                <td>
+                    @if (e.ActorName is { Length: > 0 })
+                    {
+                        @e.ActorName
+                        <div class="tiny muted">@(e.ActorRole?.Replace('_',' '))</div>
+                    }
+                    else
+                    {
+                        <span class="tiny muted">@T("claim.system")</span>
+                    }
+                </td>
+                <td><span class="badge">@e.KindLabel</span></td>
+                <td class="small pre">@e.Body</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,228 @@
+@page "/agents"
+@model AgentsModel
+@{
+    ViewData["Title"] = T("ag.title") + " · Boxora";
+
+    string TriggerLabel(string k) => T("ag.trigger." + k);
+    string AutonomyLabel(string k) => T("ag.autonomy." + k);
+    var companyGrant = (string agentId) => Model.Grants.Any(g => g.AgentId == agentId && g.HandlerId is null);
+}
+
+<div class="between" style="margin-bottom:20px">
+    <div>
+        <h1>@T("ag.title")</h1>
+        <p class="sub" style="margin:4px 0 0">@T("ag.sub")</p>
+    </div>
+    @if (Model.Notice is { } n)
+    {
+        <span class="badge ok">@T("ag.notice." + n)</span>
+    }
+</div>
+
+<div class="grid g3">
+
+    <section class="card span2">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("ag.agents")</h2>
+            <span class="tiny muted">@T("ag.agents.hint")</span>
+        </div>
+
+        @if (Model.Agents.Count == 0)
+        {
+            <p class="small muted">@T("ag.none")</p>
+        }
+        <div class="grid g2">
+            @foreach (var a in Model.Agents)
+            {
+                <div class="card" style="margin:0">
+                    <div class="spread">
+                        <strong>@a.Name</strong>
+                        @if (Model.IsAdmin)
+                        {
+                            <form method="post" asp-page-handler="Toggle" asp-route-id="@a.Id" style="display:inline">
+                                <button class="btn-ghost tiny" type="submit">
+                                    @(a.Active ? T("ag.active") : T("ag.paused"))
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <span class="badge @(a.Active ? "ok" : "")">@(a.Active ? T("ag.active") : T("ag.paused"))</span>
+                        }
+                    </div>
+                    <div class="tiny muted" style="margin:4px 0 8px">
+                        @a.Template · @(a.Lang == "both" ? "EN+NL" : a.Lang.ToUpperInvariant()) · @a.Tone
+                    </div>
+                    <div class="chips">
+                        <span class="chip">⏱ @TriggerLabel(a.TriggerKind)</span>
+                        <span class="chip">🎚 @AutonomyLabel(a.Autonomy)</span>
+                        @foreach (var tool in a.ToolList)
+                        {
+                            <span class="chip">🔧 @tool</span>
+                        }
+                    </div>
+                    @if (Model.IsAdmin)
+                    {
+                        <div style="margin-top:10px">
+                            <a class="btn-ghost tiny" href="/agents/@a.Id/flow">⇄ @T("flow.editFlow")</a>
+                        </div>
+                    }
+                    @if (Model.IsAdmin)
+                    {
+                        <div class="chips" style="margin-top:8px">
+                            @if (companyGrant(a.Id))
+                            {
+                                <span class="chip">🏢 @T("ag.deploy.company")</span>
+                            }
+                            @foreach (var g in Model.Grants.Where(g => g.AgentId == a.Id && g.HandlerId is not null))
+                            {
+                                <span class="chip">👤 @g.HandlerName</span>
+                            }
+                            @if (!Model.Grants.Any(g => g.AgentId == a.Id))
+                            {
+                                <span class="chip">⚠ @T("ag.deploy.none")</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (Model.IsAdmin)
+        {
+            <details style="margin-top:14px">
+                <summary>＋ @T("ag.new")</summary>
+                <form method="post" asp-page-handler="Create" class="stack" style="margin-top:12px">
+                    <div class="grid g3 small">
+                        <label class="field"><span class="label">@T("ag.name")</span>
+                            <input name="NewName" required /></label>
+                        <label class="field"><span class="label">@T("ag.template")</span>
+                            <select name="NewTemplate">
+                                @foreach (var tp in AgentsModel.Templates)
+                                {
+                                    <option value="@tp">@tp</option>
+                                }
+                            </select></label>
+                        <label class="field"><span class="label">@T("ag.lang")</span>
+                            <select name="NewLang">
+                                <option value="both">EN+NL</option>
+                                <option value="nl">NL</option>
+                                <option value="en">EN</option>
+                            </select></label>
+                        <label class="field"><span class="label">@T("ag.tone")</span>
+                            <select name="NewTone">
+                                <option>concise</option><option>formal</option><option>friendly</option>
+                            </select></label>
+                        <label class="field"><span class="label">@T("ag.trigger")</span>
+                            <select name="NewTrigger">
+                                <option value="manual">@TriggerLabel("manual")</option>
+                                <option value="new_claim">@TriggerLabel("new_claim")</option>
+                                <option value="documents">@TriggerLabel("documents")</option>
+                                <option value="status">@TriggerLabel("status")</option>
+                            </select></label>
+                        <label class="field"><span class="label">@T("ag.autonomy")</span>
+                            <select name="NewAutonomy">
+                                <option value="suggest">@AutonomyLabel("suggest")</option>
+                                <option value="approval">@AutonomyLabel("approval")</option>
+                                <option value="auto">@AutonomyLabel("auto")</option>
+                            </select></label>
+                    </div>
+                    <div>
+                        <span class="label">@T("ag.tools")</span>
+                        <div class="chips">
+                            @foreach (var tool in AgentsModel.ToolChoices)
+                            {
+                                <label class="chip"><input type="checkbox" name="NewTools" value="@tool" /> @tool</label>
+                            }
+                        </div>
+                    </div>
+                    <label class="field"><span class="label">@T("ag.prompt")</span>
+                        <textarea name="NewPrompt" rows="6" required></textarea></label>
+                    <div><button type="submit">@T("ag.save")</button></div>
+                </form>
+            </details>
+        }
+    </section>
+
+    <section class="card">
+        <h2>@T("ag.bench")</h2>
+        <p class="sub">@T("ag.bench.sub")</p>
+        <form method="post" asp-page-handler="Test" class="stack">
+            <label class="field"><span class="label">@T("ag.bench.agent")</span>
+                <select name="agentId">
+                    @foreach (var a in Model.Agents.Where(x => x.Active))
+                    {
+                        <option value="@a.Id" selected="@(a.Id == Model.TestAgentId)">@a.Name</option>
+                    }
+                </select></label>
+            <label class="field"><span class="label">@T("ag.bench.scenario")</span>
+                <textarea name="scenario" rows="5"
+                          placeholder="@T("ag.bench.placeholder")">@Model.TestScenario</textarea></label>
+            <div><button type="submit">@T("ag.bench.run")</button></div>
+        </form>
+        @if (Model.TestAnswer is { Length: > 0 })
+        {
+            <div style="margin-top:14px">
+                <div class="label" style="margin-bottom:6px">@T("ag.bench.answer")</div>
+                <div class="pre small">@Model.TestAnswer</div>
+            </div>
+        }
+    </section>
+
+    @if (Model.IsAdmin)
+    {
+        <section class="card span2" id="deploy">
+            <h2>@T("ag.deploy")</h2>
+            <p class="sub">@T("ag.deploy.sub")</p>
+
+            <form method="post" asp-page-handler="Grant" class="searchbar" style="margin-bottom:14px">
+                <label class="field" style="flex:1;max-width:280px"><span class="label">@T("ag.bench.agent")</span>
+                    <select name="agentId">
+                        @foreach (var a in Model.Agents)
+                        {
+                            <option value="@a.Id">@a.Name</option>
+                        }
+                    </select></label>
+                <label class="field" style="flex:1;max-width:280px"><span class="label">@T("ag.deploy.grantee")</span>
+                    <select name="handlerId">
+                        <option value="">🏢 @T("ag.deploy.company")</option>
+                        @foreach (var h in Model.Handlers.Where(x => x.Role != Auth.SuperAdminRole))
+                        {
+                            <option value="@h.Id">@h.Name (@h.RoleLabel)</option>
+                        }
+                    </select></label>
+                <button type="submit">@T("ag.deploy.grant")</button>
+            </form>
+
+            <table>
+                <thead>
+                <tr>
+                    <th>@T("ag.bench.agent")</th>
+                    <th>@T("ag.deploy.grantee")</th>
+                    <th>@T("ag.deploy.by")</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @if (Model.Grants.Count == 0)
+                {
+                    <tr><td colspan="4" class="empty">@T("ag.deploy.empty")</td></tr>
+                }
+                @foreach (var g in Model.Grants)
+                {
+                    <tr>
+                        <td><strong>@(Model.Agents.FirstOrDefault(a => a.Id == g.AgentId)?.Name ?? g.AgentId)</strong></td>
+                        <td>@(g.HandlerName is { Length: > 0 } ? g.HandlerName : "🏢 " + T("ag.deploy.company"))</td>
+                        <td class="tiny muted">@(g.GrantedByName ?? "—") · @g.GrantedAt.ToString("yyyy-MM-dd")</td>
+                        <td style="text-align:right">
+                            <form method="post" asp-page-handler="Revoke" asp-route-grantId="@g.Id" style="display:inline">
+                                <button class="btn-ghost tiny" type="submit">@T("ag.deploy.revoke")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    }
+</div>

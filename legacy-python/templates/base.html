@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% block title %}J&amp;B auto AI{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="min-h-screen bg-stone-50 text-slate-900 antialiased">
+<header class="border-b border-stone-200 bg-white/70 backdrop-blur">
+  <div class="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+    <a href="/" class="flex items-center gap-3">
+      <span class="inline-block h-2.5 w-2.5 rounded-full bg-indigo-600"></span>
+      <span class="font-semibold tracking-tight">J&amp;B <span class="text-indigo-600">auto</span> AI</span>
+      <span class="text-xs text-slate-500 hidden sm:inline">Real motor claims. Rules-audited.</span>
+    </a>
+    <nav class="flex items-center gap-4 text-sm">
+      <a class="text-slate-600 hover:text-slate-900" href="/">Dashboard</a>
+      <a class="rounded-md bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700" href="/fnol">New FNOL</a>
+      {% if handlers %}
+      <form method="post" action="/me/acting-as" class="flex items-center gap-2 text-xs">
+        <span class="text-slate-500 hidden md:inline">Acting as</span>
+        <select name="handler_id" onchange="this.form.submit()"
+                class="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {% for h in handlers %}
+          <option value="{{ h.id }}" {% if actor and actor.id == h.id %}selected{% endif %}>{{ h.name }} · {{ h.role.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+<main class="mx-auto max-w-6xl px-6 py-8 pb-32">
+  {% block content %}{% endblock %}
+</main>
+<footer class="mx-auto max-w-6xl px-6 py-10 text-xs text-slate-400">
+  LLM extracts. Rules decide. Every auto-approval reconstructible to source.
+</footer>
+
+<!-- Chatbot bubble -->
+<button id="chatToggle" aria-label="Open chat"
+  class="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 flex items-center justify-center">
+  <svg id="chatIconOpen" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  <svg id="chatIconClose" class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
+
+<section id="chatPanel"
+  class="hidden fixed bottom-24 right-6 z-40 w-[360px] max-w-[calc(100vw-2rem)] h-[520px] flex flex-col rounded-xl border border-stone-200 bg-white shadow-2xl overflow-hidden">
+  <header class="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
+    <div>
+      <div class="text-sm font-semibold">Claim assistant</div>
+      <div id="chatCtxHint" class="text-xs text-slate-500">General questions</div>
+    </div>
+    <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" title="online"></span>
+  </header>
+  <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3 text-sm bg-stone-50">
+    <div class="text-slate-500 text-xs">Ask about a claim, process, or Dutch motor legal basics. When you're viewing a claim, I use it as context.</div>
+  </div>
+  <form id="chatForm" class="border-t border-stone-200 p-3 flex items-end gap-2">
+    <textarea id="chatInput" rows="1" placeholder="Ask a question…"
+      class="flex-1 resize-none rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+    <button id="chatSend" type="submit"
+      class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">Send</button>
+  </form>
+</section>
+
+<script>
+  (function() {
+    const toggle = document.getElementById('chatToggle');
+    const panel  = document.getElementById('chatPanel');
+    const openIcon = document.getElementById('chatIconOpen');
+    const closeIcon = document.getElementById('chatIconClose');
+    const messagesEl = document.getElementById('chatMessages');
+    const form = document.getElementById('chatForm');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSend');
+    const ctxHint = document.getElementById('chatCtxHint');
+    const CLAIM_CTX = window.__CLAIM_CTX || null;
+    const history = [];
+
+    if (CLAIM_CTX) ctxHint.textContent = 'Context: ' + CLAIM_CTX.claim_number;
+
+    toggle.addEventListener('click', () => {
+      const hidden = panel.classList.toggle('hidden');
+      openIcon.classList.toggle('hidden', !hidden);
+      closeIcon.classList.toggle('hidden', hidden);
+      if (!hidden) input.focus();
+    });
+
+    function bubble(role, text = '') {
+      const div = document.createElement('div');
+      div.className = role === 'user'
+        ? 'ml-auto max-w-[80%] rounded-lg bg-indigo-600 text-white px-3 py-2 whitespace-pre-wrap'
+        : 'max-w-[85%] rounded-lg bg-white border border-stone-200 px-3 py-2 whitespace-pre-wrap';
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    async function send(text) {
+      history.push({role: 'user', content: text});
+      bubble('user', text);
+      const assistantDiv = bubble('assistant', '');
+      assistantDiv.classList.add('animate-pulse');
+      sendBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/chat', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            claim_id: CLAIM_CTX ? CLAIM_CTX.id : null,
+            messages: history,
+          }),
+        });
+        if (!resp.ok || !resp.body) throw new Error('chat failed: ' + resp.status);
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let full = '';
+        assistantDiv.classList.remove('animate-pulse');
+        while (true) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, {stream: true});
+          let idx;
+          while ((idx = buf.indexOf('\n\n')) !== -1) {
+            const raw = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            const evLine = raw.split('\n').find(l => l.startsWith('event:'));
+            const dataLine = raw.split('\n').find(l => l.startsWith('data:'));
+            if (!dataLine) continue;
+            const ev = evLine ? evLine.slice(6).trim() : 'message';
+            let payload = {}; try { payload = JSON.parse(dataLine.slice(5).trim()); } catch(e){}
+            if (ev === 'delta' && payload.text) {
+              full += payload.text;
+              assistantDiv.textContent = full;
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (ev === 'error') {
+              assistantDiv.textContent = '⚠️ ' + (payload.message || 'error');
+            }
+          }
+        }
+        history.push({role: 'assistant', content: full});
+      } catch (e) {
+        assistantDiv.textContent = '⚠️ ' + e.message;
+        assistantDiv.classList.remove('animate-pulse');
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      send(text);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+    });
+  })();
+</script>
+</body>
+</html>

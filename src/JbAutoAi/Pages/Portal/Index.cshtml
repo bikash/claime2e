@@ -1,0 +1,47 @@
+@page "/portal"
+@model JbAutoAi.Pages.Portal.IndexModel
+@{
+    ViewData["Title"] = T("portal.myClaims") + " · Boxora";
+    Layout = "_PortalLayout";
+}
+
+<div class="between" style="margin-bottom:20px">
+    <h1>@T("portal.myClaims")</h1>
+    <a href="/portal/new">@T("portal.newClaim")</a>
+</div>
+
+@if (Model.Claims.Count == 0)
+{
+    <div class="card">
+        <p class="empty">
+            @T("portal.none") <a href="/portal/new">@T("portal.reportFirst")</a>
+        </p>
+    </div>
+}
+
+<ul class="plain">
+    @foreach (var c in Model.Claims)
+    {
+        var state = PortalView.State(c);
+        <li class="card" style="margin-bottom:12px">
+            <div class="spread" style="align-items:flex-start">
+                <div>
+                    <div class="label">@c.ClaimNumber</div>
+                    <h2 style="margin-top:4px">@(c.LicensePlate ?? "—") · @(c.LossLocation ?? "")</h2>
+                    <div class="small muted" style="margin-top:4px">
+                        @T("portal.reported") @c.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")
+                        @if (c.LossDate is { } ld)
+                        {
+                            <text> · @T("claim.lossDate") @ld.ToString("yyyy-MM-dd")</text>
+                        }
+                    </div>
+                </div>
+                <span class="badge @state.Cls">@state.Label</span>
+            </div>
+            <p class="small" style="margin:12px 0 0">@state.Message</p>
+            <div style="margin-top:12px;text-align:right">
+                <a class="btn btn-ghost" href="/portal/claims/@c.Id">@T("portal.view")</a>
+            </div>
+        </li>
+    }
+</ul>

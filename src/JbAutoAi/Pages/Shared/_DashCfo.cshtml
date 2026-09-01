@@ -1,0 +1,106 @@
+@model IndexModel
+@{
+    var p = Model.Period;
+    var incDelta = Model.Incurred - Model.IncurredPrior;
+    var monthMax = Math.Max(1, Model.CostMonths.Select(m => m.Settled + m.Open).DefaultIfEmpty(1).Max());
+}
+
+<div class="grid g5" style="margin-bottom:16px">
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("incurred", I18n.Money(Model.Incurred),
+        Foot: T("dash.vsPrior", (incDelta >= 0 ? "+" : "") + I18n.Money(Math.Abs(incDelta))),
+        Scope: "all_incurred", Tone: "clay", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("outstanding", I18n.Money(Model.Outstanding),
+        Foot: T("dash.atPeriodEnd"), Scope: "all_outstanding", Tone: "ink", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("loss_ratio", "—", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("recoveries", "—", Period: p))" />
+    <partial name="_Kpi" model="@(new Metrics.KpiCard("leakage", "—", Period: p))" />
+</div>
+
+<div class="card" style="border-color:var(--warn);background:var(--warn-bg);margin-bottom:16px">
+    <div class="spread">
+        <strong>@T("cfo.ledgerTitle")</strong>
+        <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+    </div>
+    <p class="small" style="margin-top:6px">@T("cfo.ledgerBody")</p>
+</div>
+
+<div class="grid g2" style="margin-bottom:16px">
+    @* CD-1 — claim store derived: settled vs still reserved *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("cd.costByMonth")</h2>
+            <span class="tiny muted">@T("cfo.claimStoreDerived")</span>
+        </div>
+        @if (Model.CostMonths.Count == 0)
+        {
+            <p class="small muted">@T("dash.emptyRange")</p>
+        }
+        else
+        {
+            <div class="colchart" role="img" aria-label="@T("cd.costByMonth")">
+                @foreach (var m in Model.CostMonths)
+                {
+                    var total = m.Settled + m.Open;
+                    <div class="col" title="@m.Month.ToString("yyyy-MM"): @I18n.Money(total)">
+                        <span class="col-stack" style="height:@((int)(total / monthMax * 100))%">
+                            <span class="seg open" style="height:@(total == 0 ? 0 : (int)(m.Open / total * 100))%"></span>
+                            <span class="seg settled" style="height:@(total == 0 ? 0 : (int)(m.Settled / total * 100))%"></span>
+                        </span>
+                        <span class="col-x tiny muted">@m.Month.ToString("MM/yy")</span>
+                    </div>
+                }
+            </div>
+            <div class="row tiny muted" style="gap:14px;margin-top:8px">
+                <span><span class="swatch" style="background:var(--clay)"></span>@T("cd.reserved")</span>
+                <span><span class="swatch" style="background:var(--ok)"></span>@T("cd.paid")</span>
+            </div>
+            <table class="visually-hidden">
+                <caption>@T("cd.costByMonth")</caption>
+                <tbody>
+                @foreach (var m in Model.CostMonths)
+                {
+                    <tr><th scope="row">@m.Month.ToString("yyyy-MM")</th><td>@I18n.Money(m.Open)</td><td>@I18n.Money(m.Settled)</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @* CD-2 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("cd.breakdown")</h2>
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+        </div>
+        <p class="small muted">@T("miss.costComponents")</p>
+    </section>
+</div>
+
+<div class="grid g3">
+    @* CD-3 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("cd.reserveAccuracy")</h2>
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+        </div>
+        <p class="small muted">@T("miss.finalCost")</p>
+    </section>
+
+    @* CD-4 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("cd.recoveryPipeline")</h2>
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+        </div>
+        <p class="small muted">@T("miss.recovery")</p>
+    </section>
+
+    @* CD-5 *@
+    <section class="card">
+        <div class="spread" style="margin-bottom:12px">
+            <h2>@T("cd.automationSavings")</h2>
+            <span class="badge warn"><span class="pip"></span>@T("dash.noSource")</span>
+        </div>
+        <p class="small muted">@T("miss.baselineCost")</p>
+    </section>
+</div>
